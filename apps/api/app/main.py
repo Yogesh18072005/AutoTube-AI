@@ -182,7 +182,7 @@ def create_script(payload: ScriptInput) -> dict[str, Any]:
 @app.post("/api/v1/videos")
 def create_video(payload: VideoInput) -> dict[str, Any]:
     data = payload.model_dump()
-    data.update({"asset_url": None, "thumbnail_url": None, "seo": {"title": payload.title, "description": payload.description, "tags": payload.tags}})
+    data.update({"asset_url": payload.asset_url, "thumbnail_url": None, "seo": {"title": payload.title, "description": payload.description, "tags": payload.tags}})
     return save("video", data, "video_review")
 
 @app.post("/api/v1/videos/{video_id}/approve")
