@@ -239,7 +239,7 @@ async def youtube_analytics(start_date: str, end_date: str):
         if time.time()>tokens.get("expiry_date",0)/1000-60:
             refresh=await client.post("https://oauth2.googleapis.com/token",data={"client_id":os.getenv("YOUTUBE_CLIENT_ID"),"client_secret":os.getenv("YOUTUBE_CLIENT_SECRET"),"refresh_token":tokens.get("refresh_token"),"grant_type":"refresh_token"})
             refresh.raise_for_status(); tokens.update(refresh.json()); TOKEN_PATH.write_bytes(fernet.encrypt(json.dumps(tokens).encode()))
-        response=await client.get("https://youtubeanalytics.googleapis.com/v2/reports",params={"ids":"channel==MINE","startDate":start_date,"endDate":end_date,"metrics":"views,estimatedMinutesWatched,averageViewDuration,subscribersGained","dimensions":"day","access_token":tokens["access_token"]})
+        response=await client.get("https://youtubeanalytics.googleapis.com/v2/reports",params={"ids":"channel==MINE","startDate":start_date,"endDate":end_date,"metrics":"views,estimatedMinutesWatched,averageViewDuration,subscribersGained","dimensions":"day"},headers={"Authorization":f"Bearer {tokens['access_token']}"})
         response.raise_for_status()
         return response.json()
 
