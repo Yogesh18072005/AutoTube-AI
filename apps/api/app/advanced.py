@@ -270,3 +270,50 @@ def login_user(payload: LoginInput):
         raise HTTPException(401,"Invalid email or password.")
     user=users[0]
     return {"user_id":user["id"],"email":payload.email.lower(),"access_token":_jwt({"sub":user["id"],"exp":int(time.time())+3600}),"token_type":"bearer"}
+
+
+class YouTubeUploadInput(BaseModel):
+    video_id: str
+    privacy_status: str = Field(default="private", pattern="^(private|unlisted|public)$")
+    publish_at: str | None = None
+
+
+@router.post("/publishing/youtube/upload")
+async def upload_approved_video(payload: YouTubeUploadInput):
+    from app.main import get_record, change
+    video=get_record(payload.video_id)
+    if video["kind"]!="video" or video["status"]!="approved":
+        raise HTTPException(409,"Publishing blocked: approve this exact final video before upload.")
+    data=video["data"]
+    asset_url=data.get("asset_url")
+    if not asset_url or not asset_url.startswith("/media/"):
+        raise HTTPException(422,"The approved video record must reference a rendered /media/ asset.")
+    asset=(MEDIA_ROOT/Path(asset_url).name).resolve()
+    if MEDIA_ROOT.resolve() not in asset.parents or not asset.is_file():
+        raise HTTPException(404,"Rendered video asset was not found on this API host.")
+    if not TOKEN_PATH.exists():
+        raise HTTPException(401,"Connect a YouTube channel before uploading.")
+    token_key=os.getenv("AUTOTUBE_TOKEN_ENCRYPTION_KEY")
+    if not token_key: raise HTTPException(503,"Token encryption key is not configured.")
+    from cryptography.fernet import Fernet
+    try: tokens=json.loads(Fernet(token_key.encode()).decrypt(TOKEN_PATH.read_bytes()))
+    except Exception as exc: raise HTTPException(500,"Stored YouTube credentials could not be decrypted.") from exc
+    async with httpx.AsyncClient(timeout=180) as client:
+        if time.time()>tokens.get("expiry_date",0)/1000-60:
+            refresh=await client.post("https://oauth2.googleapis.com/token",data={"client_id":os.getenv("YOUTUBE_CLIENT_ID"),"client_secret":os.getenv("YOUTUBE_CLIENT_SECRET"),"refresh_token":tokens.get("refresh_token"),"grant_type":"refresh_token"})
+            refresh.raise_for_status(); tokens.update(refresh.json())
+            TOKEN_PATH.write_bytes(Fernet(token_key.encode()).encrypt(json.dumps(tokens).encode()))
+        metadata={"snippet":{"title":str(data.get("title","AutoTube AI video"))[:100],"description":str(data.get("description",""))[:5000],"tags":data.get("tags",[])[:500],"categoryId":"28"},"status":{"privacyStatus":payload.privacy_status}}
+        if payload.publish_at:
+            if payload.privacy_status!="private": raise HTTPException(422,"Scheduled publication must remain private until YouTube publishAt is applied.")
+            metadata["status"]["publishAt"]=payload.publish_at
+        init=await client.post("https://www.googleapis.com/upload/youtube/v3/videos",params={"uploadType":"resumable","part":"snippet,status"},headers={"Authorization":f"Bearer {tokens['access_token']}","Content-Type":"application/json; charset=UTF-8","X-Upload-Content-Type":"video/mp4","X-Upload-Content-Length":str(asset.stat().st_size)},json=metadata)
+        init.raise_for_status()
+        upload_url=init.headers.get("location")
+        if not upload_url: raise HTTPException(502,"YouTube did not return a resumable upload URL.")
+        with asset.open("rb") as stream:
+            uploaded=await client.put(upload_url,content=stream.read(),headers={"Authorization":f"Bearer {tokens['access_token']}","Content-Type":"video/mp4","Content-Length":str(asset.stat().st_size)})
+        uploaded.raise_for_status()
+        result=uploaded.json()
+    change(payload.video_id,status="published",patch={"youtube_video_id":result.get("id"),"youtube_url":f"https://youtube.com/watch?v={result.get('id')}","published_at":now()})
+    return {"status":"published","youtube_video_id":result.get("id"),"url":f"https://youtube.com/watch?v={result.get('id')}"}
