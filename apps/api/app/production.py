@@ -75,7 +75,7 @@ def render_title_card(title: str, *, duration_seconds: int = 5, audio_path: str 
     output = MEDIA_ROOT / f"render-{uuid.uuid4().hex}.mp4"
     command = [
         ffmpeg, "-y", "-f", "lavfi", "-i",
-        "color=c=#101a2b:s=1920x1080:r=30",
+        "color=c=0x101a2b:s=1920x1080:r=30",
     ]
     if audio_path:
         source = Path(audio_path).resolve()
