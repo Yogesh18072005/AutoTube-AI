@@ -354,3 +354,29 @@ async def generate_seo(payload: GenerateScriptInput) -> dict[str, Any]:
 
 from app.advanced import router as advanced_router
 app.include_router(advanced_router)
+
+
+class PipelineInput(BaseModel):
+    topic: str = Field(min_length=3, max_length=240)
+    language: str = "en"
+    format: str = "short"
+
+
+@app.post("/api/v1/automation/queue")
+def queue_pipeline(payload: PipelineInput) -> dict[str, Any]:
+    try:
+        from app.worker import execute_pipeline
+        task = execute_pipeline.delay(payload.model_dump())
+    except Exception as exc:
+        raise HTTPException(503, f"Automation queue unavailable: {exc}") from exc
+    return {"job_id": task.id, "status": "queued", "approval_required": True}
+
+
+@app.get("/api/v1/automation/jobs/{job_id}")
+def automation_job(job_id: str) -> dict[str, Any]:
+    try:
+        from app.worker import celery_app
+        result = celery_app.AsyncResult(job_id)
+        return {"job_id": job_id, "status": result.status.lower(), "result": result.result if result.successful() else None}
+    except Exception as exc:
+        raise HTTPException(503, f"Automation worker unavailable: {exc}") from exc
