@@ -207,7 +207,7 @@ def schedule_video(video_id: str, payload: ScheduleInput) -> dict[str, Any]:
         raise HTTPException(409, "Publishing blocked: approve the final video and metadata first.")
     if not os.getenv("YOUTUBE_CLIENT_ID") or not os.getenv("YOUTUBE_CLIENT_SECRET"):
         raise HTTPException(503, "YouTube OAuth is not configured. Add credentials to the server environment.")
-    return change(video_id, status="scheduled", patch={"scheduled_at": payload.scheduled_at})
+    raise HTTPException(501, "The YouTube OAuth token flow and upload worker must be implemented before live scheduling is enabled.")
 
 @app.get("/api/v1/analytics/overview")
 def analytics() -> dict[str, Any]:
