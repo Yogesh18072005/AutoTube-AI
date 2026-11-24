@@ -5,10 +5,8 @@ services:
       POSTGRES_DB: autotube
       POSTGRES_USER: autotube
       POSTGRES_PASSWORD: autotube_dev
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    ports: ["5432:5432"]
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U autotube -d autotube"]
       interval: 5s
@@ -16,10 +14,33 @@ services:
       retries: 10
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
+    ports: ["6379:6379"]
+    volumes: ["redis_data:/data"]
+  api:
+    build: ./apps/api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://autotube:autotube_dev@postgres:5432/autotube
+      REDIS_URL: redis://redis:6379/0
+      AUTOTUBE_MEDIA_DIR: /app/media
+    ports: ["8000:8000"]
+    volumes: ["autotube_media:/app/media"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+  worker:
+    build: ./apps/api
+    command: ["celery","-A","app.worker:celery_app","worker","--loglevel=INFO"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://autotube:autotube_dev@postgres:5432/autotube
+      REDIS_URL: redis://redis:6379/0
+      AUTOTUBE_MEDIA_DIR: /app/media
+    volumes: ["autotube_media:/app/media"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
 volumes:
   postgres_data:
   redis_data:
+  autotube_media:
