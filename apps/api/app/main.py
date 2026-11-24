@@ -247,3 +247,105 @@ def automation_status() -> dict[str, Any]:
         "approval_gate": "enforced_by_api",
         "message": "Background worker and external providers must be configured before unattended production.",
     }
+
+
+# Optional real production adapters. Missing credentials fail explicitly instead of
+# returning mock assets or claiming that a video was generated.
+from fastapi.staticfiles import StaticFiles
+from app.production import (
+    MEDIA_ROOT,
+    ProviderNotConfigured,
+    generate_text,
+    public_media_url,
+    render_title_card,
+    synthesize_voice,
+)
+
+app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
+
+
+class GenerateScriptInput(BaseModel):
+    topic: str = Field(min_length=3, max_length=240)
+    language: str = "en"
+    format: str = "short"
+    tone: str = "clear and engaging"
+    audience: str = "Beginners"
+
+
+class VoiceInput(BaseModel):
+    text: str = Field(min_length=1, max_length=5000)
+    voice_id: str | None = None
+
+
+class RenderInput(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    duration_seconds: int = Field(default=5, ge=3, le=30)
+    audio_url: str | None = None
+
+
+@app.post("/api/v1/scripts/generate", tags=["production"])
+async def generate_script(payload: GenerateScriptInput) -> dict[str, Any]:
+    language_name = "Hindi" if payload.language == "hi" else "English"
+    length = "a concise YouTube Short script (45-60 seconds)" if payload.format == "short" else "a detailed YouTube long-form script (6-10 minutes)"
+    prompt = (
+        f"Create {length} in {language_name} about: {payload.topic}. "
+        f"Audience: {payload.audience}. Tone: {payload.tone}. "
+        "Return a strong opening hook, scene-by-scene narration, visual direction, "
+        "and a concise call to action. Avoid unsupported factual claims. "
+        "Clearly mark facts that need source verification."
+    )
+    try:
+        text = await generate_text(prompt, system="You are an expert bilingual YouTube scriptwriter. Write original, audience-friendly scripts.")
+    except ProviderNotConfigured as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, f"AI provider request failed: {exc}") from exc
+    return save("script", {**payload.model_dump(), "full_text": text, "generation_mode": "provider", "provider": "openai-compatible"}, "script_draft")
+
+
+@app.post("/api/v1/voice/generate", tags=["production"])
+async def generate_voice(payload: VoiceInput) -> dict[str, Any]:
+    try:
+        path = await synthesize_voice(payload.text, voice_id=payload.voice_id)
+    except ProviderNotConfigured as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, f"Voice provider request failed: {exc}") from exc
+    return save("asset", {"asset_type": "voice", "file_name": path.name, "url": public_media_url(path), "mime_type": "audio/mpeg", "provider": "elevenlabs"}, "ready")
+
+
+@app.post("/api/v1/render/title-card", tags=["production"])
+def render_video_title_card(payload: RenderInput) -> dict[str, Any]:
+    audio_path = None
+    if payload.audio_url:
+        if not payload.audio_url.startswith("/media/"):
+            raise HTTPException(400, "audio_url must refer to an asset under /media/")
+        audio_path = str(MEDIA_ROOT / Path(payload.audio_url).name)
+    try:
+        path = render_title_card(payload.title, duration_seconds=payload.duration_seconds, audio_path=audio_path)
+    except ProviderNotConfigured as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except (ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        raise HTTPException(422, f"FFmpeg rendering failed: {exc}") from exc
+    return save("asset", {"asset_type": "video", "file_name": path.name, "url": public_media_url(path), "mime_type": "video/mp4", "render_type": "title_card"}, "rendered")
+
+
+@app.post("/api/v1/seo/generate", tags=["production"])
+async def generate_seo(payload: GenerateScriptInput) -> dict[str, Any]:
+    prompt = (
+        f"Create YouTube metadata for a {payload.format} about {payload.topic} in "
+        f"{'Hindi' if payload.language == 'hi' else 'English'}. Return JSON with "
+        "title_options (3), description, tags (10), and hashtags (5). "
+        "Do not promise rankings or invent facts."
+    )
+    try:
+        text = await generate_text(prompt, system="You are a YouTube metadata editor. Return valid JSON only.")
+    except ProviderNotConfigured as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, f"SEO provider request failed: {exc}") from exc
+    try:
+        metadata = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(502, "AI provider returned invalid JSON for SEO metadata.") from exc
+    return save("seo", {**payload.model_dump(), "metadata": metadata}, "draft")
