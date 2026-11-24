@@ -1,50 +1,80 @@
 # AutoTube AI
 
-AI-assisted YouTube production workspace for bilingual (Hindi/English) technology content.
-Supports Shorts and long-form videos. Every video must pass human approval before publishing.
+A bilingual (Hindi/English) AI & technology YouTube production workspace for Shorts and long-form videos. The platform is designed around a strict human approval gate before publishing.
 
-## Architecture
+## Workspace modules
 
-- `apps/web`: Next.js creator dashboard
-- `apps/api`: FastAPI backend
-- `infra`: local PostgreSQL and Redis
-- `docs`: architecture and implementation plan
+- Dashboard and channel configuration
+- Topic ideas and research briefs
+- Hindi/English script studio
+- Voice, media library and asset provenance workflows
+- Video editing/rendering workflow planning
+- Thumbnail and SEO workspaces
+- Approval queue with approve/reject actions
+- YouTube publishing and scheduling boundary
+- Analytics overview
+- Automation status and provider settings
 
-## Prerequisites
+## Stack
 
-- Node.js 20+
-- Python 3.11+
-- Docker Desktop
+- Web: Next.js 15, React 19, TypeScript
+- API: FastAPI + Pydantic
+- Local persistence: SQLite starter store (replace with PostgreSQL for deployment)
+- Infrastructure: PostgreSQL and Redis services in Docker Compose
+- Planned production workers: Redis/Celery + FFmpeg
+- External integrations: AI/LLM, TTS, media generation, YouTube Data API and YouTube Analytics API
 
-## Start infrastructure
+## Run locally (PowerShell)
+
+Start from the repository root.
 
 ```powershell
-docker compose up -d
-```
-
-## Start API
-
-```powershell
+# Terminal 1: API
 cd apps/api
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e .
+pip install -e ".[dev]"
 uvicorn app.main:app --reload --port 8000
 ```
 
-API health: http://localhost:8000/health
-
-## Start web app
-
 ```powershell
+# Terminal 2: web app
 cd apps/web
 npm install
+$env:NEXT_PUBLIC_API_URL="http://localhost:8000"
 npm run dev
 ```
 
-Web app: http://localhost:3000
+Open http://localhost:3000. API docs are at http://localhost:8000/docs.
 
-## Safety and publishing rule
+## Tests and checks
 
-Generated videos are drafts by default. Publishing is blocked unless a user explicitly approves
-the final rendered asset and its title/description. Never place API keys in source control.
+```powershell
+# API
+cd apps/api
+pytest
+
+# Web
+cd apps/web
+npm run typecheck
+npm run lint
+npm run build
+```
+
+## Provider configuration
+
+Copy `.env.example` to `.env` for local configuration. Keep all secrets on the API/server side. Never commit API keys or OAuth tokens.
+
+The current release provides a working local workflow foundation and provider boundaries. Research and script endpoints use clearly labelled template fallbacks until an AI/search provider is configured. Voice generation, generated media, FFmpeg rendering, real YouTube OAuth uploads, and real channel analytics require their respective provider credentials and background services; they are not simulated as successful.
+
+## Publishing safety
+
+- New videos are created in review state.
+- Only an explicitly approved video can enter the scheduling endpoint.
+- The API rejects scheduling for unapproved videos.
+- YouTube OAuth must be configured before scheduling can proceed.
+- Review the final rendered file and metadata before approving.
+
+## Production hardening still required
+
+Before public deployment: replace the local SQLite starter store with PostgreSQL migrations, add authentication and per-user authorization, configure durable object storage, add Redis/Celery workers, implement provider adapters, complete YouTube OAuth/token refresh and upload reconciliation, and add rate limits, audit logging and deployment secrets management.
