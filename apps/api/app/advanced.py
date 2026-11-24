@@ -1,0 +1,279 @@
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import os
+import secrets
+import shutil
+import subprocess
+import time
+import uuid
+from pathlib import Path
+from urllib.parse import urlencode
+
+import httpx
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field
+
+from app.production import MEDIA_ROOT, ProviderNotConfigured
+
+router = APIRouter(prefix="/api/v1", tags=["advanced"])
+TOKEN_PATH = MEDIA_ROOT / ".youtube-token.json"
+
+
+def _secret() -> str:
+    value = os.getenv("AUTOTUBE_SECRET_KEY")
+    if not value:
+        raise ProviderNotConfigured("Set AUTOTUBE_SECRET_KEY on the API server.")
+    return value
+
+
+def _sign(value: str) -> str:
+    return hmac.new(_secret().encode(), value.encode(), hashlib.sha256).hexdigest()
+
+
+def _b64(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode().rstrip("=")
+
+
+def _jwt(payload: dict) -> str:
+    header = _b64(b'{"alg":"HS256","typ":"JWT"}')
+    body = _b64(json.dumps(payload, separators=(",", ":")).encode())
+    signature = _b64(hmac.new(_secret().encode(), f"{header}.{body}".encode(), hashlib.sha256).digest())
+    return f"{header}.{body}.{signature}"
+
+
+class Scene(BaseModel):
+    narration: str = Field(min_length=1, max_length=3000)
+    visual: str = Field(default="Technology background", max_length=240)
+    seconds: int = Field(default=5, ge=2, le=30)
+
+
+class RenderProject(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    scenes: list[Scene] = Field(min_length=1, max_length=30)
+    captions: bool = True
+
+
+class ThumbnailRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    subtitle: str = Field(default="", max_length=120)
+
+
+class RegisterInput(BaseModel):
+    email: str
+    password: str = Field(min_length=12, max_length=128)
+
+
+class LoginInput(BaseModel):
+    email: str
+    password: str
+
+
+def _font(size: int):
+    try:
+        from PIL import ImageFont
+        for candidate in ["C:/Windows/Fonts/arialbd.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]:
+            if Path(candidate).exists():
+                return ImageFont.truetype(candidate, size)
+        return ImageFont.load_default()
+    except Exception:
+        return None
+
+
+@router.get("/research/trends")
+async def youtube_trends(q: str = "artificial intelligence", region: str = "IN", language: str = "en"):
+    key = os.getenv("YOUTUBE_DATA_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not key:
+        raise HTTPException(503, "Set YOUTUBE_DATA_API_KEY or GOOGLE_API_KEY to retrieve live YouTube trend signals.")
+    params = {"part": "snippet,statistics", "q": q, "type": "video", "order": "viewCount", "publishedAfter": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time()-7*86400)), "regionCode": region, "relevanceLanguage": language, "maxResults": 20, "key": key}
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get("https://www.googleapis.com/youtube/v3/search", params=params)
+        response.raise_for_status()
+        payload = response.json()
+        ids = [x["id"]["videoId"] for x in payload.get("items", []) if x.get("id", {}).get("videoId")]
+        stats = {}
+        if ids:
+            detail = await client.get("https://www.googleapis.com/youtube/v3/videos", params={"part":"statistics,contentDetails","id":",".join(ids),"key":key})
+            detail.raise_for_status()
+            stats = {x["id"]: x.get("statistics", {}) for x in detail.json().get("items", [])}
+    return {"query": q, "region": region, "window_days": 7, "items": [{"video_id": x["id"]["videoId"], "title": x["snippet"]["title"], "channel": x["snippet"]["channelTitle"], "published_at": x["snippet"]["publishedAt"], "url": "https://youtube.com/watch?v="+x["id"]["videoId"], "statistics": stats.get(x["id"]["videoId"], {})} for x in payload.get("items", []) if x.get("id", {}).get("videoId")]}
+
+
+@router.post("/media/image")
+async def generate_image(request: Request):
+    body = await request.json()
+    prompt = str(body.get("prompt", "")).strip()[:2000]
+    if len(prompt) < 5:
+        raise HTTPException(422, "Provide an image prompt of at least five characters.")
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        raise HTTPException(503, "OPENAI_API_KEY is required for image generation.")
+    async with httpx.AsyncClient(timeout=180) as client:
+        response = await client.post("https://api.openai.com/v1/images/generations", headers={"Authorization": f"Bearer {key}"}, json={"model": os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"), "prompt": prompt, "size": "1536x1024"})
+        response.raise_for_status()
+        result = response.json()
+        item = result["data"][0]
+        if item.get("b64_json"):
+            raw = base64.b64decode(item["b64_json"])
+        elif item.get("url"):
+            download = await client.get(item["url"])
+            download.raise_for_status()
+            raw = download.content
+        else:
+            raise HTTPException(502, "Image provider returned no image data.")
+    path = MEDIA_ROOT / f"image-{uuid.uuid4().hex}.png"
+    path.write_bytes(raw)
+    return {"url": f"/media/{path.name}", "file_name": path.name, "provider": "openai"}
+
+
+@router.post("/videos/render-project")
+def render_project(payload: RenderProject):
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise HTTPException(503, "Install FFmpeg and add it to PATH on the API server.")
+    work = MEDIA_ROOT / f"job-{uuid.uuid4().hex}"
+    work.mkdir()
+    clips = []
+    try:
+        for index, scene in enumerate(payload.scenes):
+            output = work / f"scene-{index:03}.mp4"
+            title = scene.visual.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")[:180]
+            command = [ffmpeg, "-y", "-f", "lavfi", "-i", "color=c=0x101a2b:s=1080x1920:r=30", "-vf", f"drawtext=text='{title}':fontcolor=white:fontsize=42:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=0x00000099:boxborderw=24", "-t", str(scene.seconds), "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(output)]
+            subprocess.run(command, check=True, capture_output=True, timeout=180)
+            clips.append(output)
+        concat = work / "concat.txt"
+        concat.write_text("".join(f"file '{p.as_posix()}'\n" for p in clips), encoding="utf-8")
+        target = MEDIA_ROOT / f"video-{uuid.uuid4().hex}.mp4"
+        subprocess.run([ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(concat), "-c", "copy", str(target)], check=True, capture_output=True, timeout=300)
+        return {"url": f"/media/{target.name}", "file_name": target.name, "scenes": len(clips), "status": "rendered", "captions": "not_generated"}
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or b"").decode(errors="replace")[-1200:]
+        raise HTTPException(422, f"FFmpeg render failed: {detail}") from exc
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+@router.post("/thumbnails/generate")
+def generate_thumbnail(payload: ThumbnailRequest):
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError as exc:
+        raise HTTPException(503, "Install Pillow in the API environment to generate thumbnails.") from exc
+    image = Image.new("RGB", (1280, 720), "#101a2b")
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((48, 48, 1232, 672), radius=34, fill="#172b49", outline="#5d83c7", width=4)
+    title_font, sub_font = _font(76), _font(38)
+    words = payload.title.split()
+    lines, current = [], ""
+    for word in words:
+        test = (current+" "+word).strip()
+        if draw.textbbox((0,0), test, font=title_font)[2] > 1080 and current:
+            lines.append(current); current=word
+        else: current=test
+    if current: lines.append(current)
+    y = 260 - len(lines)*48
+    for line in lines[:3]:
+        box=draw.textbbox((0,0),line,font=title_font)
+        draw.text(((1280-(box[2]-box[0]))/2,y),line,font=title_font,fill="white")
+        y += 100
+    if payload.subtitle:
+        box=draw.textbbox((0,0),payload.subtitle,font=sub_font)
+        draw.text(((1280-(box[2]-box[0]))/2,570),payload.subtitle,font=sub_font,fill="#a9c8ff")
+    target=MEDIA_ROOT/f"thumbnail-{uuid.uuid4().hex}.png"
+    image.save(target)
+    return {"url":f"/media/{target.name}","file_name":target.name,"width":1280,"height":720}
+
+
+@router.get("/auth/google/start")
+def youtube_oauth_start():
+    client_id=os.getenv("YOUTUBE_CLIENT_ID")
+    redirect=os.getenv("YOUTUBE_REDIRECT_URI","http://localhost:8000/api/v1/auth/google/callback")
+    if not client_id or not os.getenv("YOUTUBE_CLIENT_SECRET"):
+        raise HTTPException(503,"Configure YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET.")
+    state=secrets.token_urlsafe(32)
+    signed=f"{state}.{_sign(state)}"
+    params={"client_id":client_id,"redirect_uri":redirect,"response_type":"code","scope":"https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly","access_type":"offline","prompt":"consent","state":signed}
+    return {"authorization_url":"https://accounts.google.com/o/oauth2/v2/auth?"+urlencode(params),"state":signed}
+
+
+@router.get("/auth/google/callback")
+async def youtube_oauth_callback(code: str, state: str):
+    try:
+        raw,signature=state.rsplit(".",1)
+        if not hmac.compare_digest(signature,_sign(raw)): raise ValueError("bad state")
+    except Exception as exc:
+        raise HTTPException(400,"Invalid OAuth state.") from exc
+    async with httpx.AsyncClient(timeout=30) as client:
+        response=await client.post("https://oauth2.googleapis.com/token",data={"code":code,"client_id":os.getenv("YOUTUBE_CLIENT_ID"),"client_secret":os.getenv("YOUTUBE_CLIENT_SECRET"),"redirect_uri":os.getenv("YOUTUBE_REDIRECT_URI","http://localhost:8000/api/v1/auth/google/callback"),"grant_type":"authorization_code"})
+        response.raise_for_status()
+        tokens=response.json()
+    token_key=os.getenv("AUTOTUBE_TOKEN_ENCRYPTION_KEY")
+    if not token_key:
+        raise HTTPException(503,"OAuth completed but token storage is disabled. Configure AUTOTUBE_TOKEN_ENCRYPTION_KEY and retry authorization.")
+    # Encrypt token file with authenticated stream construction; key must be a random secret.
+    key=hashlib.sha256(token_key.encode()).digest()
+    nonce=secrets.token_bytes(16)
+    raw=json.dumps(tokens).encode()
+    stream=b""
+    counter=0
+    while len(stream)<len(raw):
+        stream+=hmac.new(key,nonce+counter.to_bytes(4,"big"),hashlib.sha256).digest(); counter+=1
+    cipher=bytes(a^b for a,b in zip(raw,stream))
+    tag=hmac.new(key,nonce+cipher,hashlib.sha256).digest()
+    TOKEN_PATH.write_bytes(nonce+tag+cipher)
+    return {"connected":True,"message":"YouTube OAuth tokens stored encrypted on this API host. You may close this page."}
+
+
+@router.get("/analytics/youtube")
+async def youtube_analytics(start_date: str, end_date: str):
+    if not TOKEN_PATH.exists():
+        raise HTTPException(401,"Connect a YouTube channel using /api/v1/auth/google/start.")
+    token_key=os.getenv("AUTOTUBE_TOKEN_ENCRYPTION_KEY")
+    if not token_key: raise HTTPException(503,"Token encryption key is not configured.")
+    blob=TOKEN_PATH.read_bytes(); nonce,tag,cipher=blob[:16],blob[16:48],blob[48:]
+    key=hashlib.sha256(token_key.encode()).digest()
+    if not hmac.compare_digest(tag,hmac.new(key,nonce+cipher,hashlib.sha256).digest()):
+        raise HTTPException(500,"Stored OAuth token authentication failed.")
+    stream=b""; counter=0
+    while len(stream)<len(cipher):
+        stream+=hmac.new(key,nonce+counter.to_bytes(4,"big"),hashlib.sha256).digest(); counter+=1
+    tokens=json.loads(bytes(a^b for a,b in zip(cipher,stream)))
+    async with httpx.AsyncClient(timeout=40) as client:
+        if time.time()>tokens.get("expiry_date",0)/1000-60:
+            refresh=await client.post("https://oauth2.googleapis.com/token",data={"client_id":os.getenv("YOUTUBE_CLIENT_ID"),"client_secret":os.getenv("YOUTUBE_CLIENT_SECRET"),"refresh_token":tokens.get("refresh_token"),"grant_type":"refresh_token"})
+            refresh.raise_for_status(); tokens.update(refresh.json()); TOKEN_PATH.write_bytes(nonce+tag+cipher)
+        response=await client.get("https://youtubeanalytics.googleapis.com/v2/reports",params={"ids":"channel==MINE","startDate":start_date,"endDate":end_date,"metrics":"views,estimatedMinutesWatched,averageViewDuration,subscribersGained","dimensions":"day","access_token":tokens["access_token"]})
+        response.raise_for_status()
+        return response.json()
+
+
+@router.post("/auth/register")
+def register_user(payload: RegisterInput):
+    # Password hashing is deliberately delegated to bcrypt; no plaintext credentials are persisted.
+    try:
+        from pwdlib import PasswordHash
+    except ImportError as exc:
+        raise HTTPException(503,"Install pwdlib[argon2] to enable local account authentication.") from exc
+    from app.main import save
+    existing=[x for x in __import__("app.main",fromlist=["list_records"]).list_records("user") if x["data"].get("email","").lower()==payload.email.lower()]
+    if existing: raise HTTPException(409,"An account with this email already exists.")
+    record=save("user",{"email":payload.email.lower(),"password_hash":PasswordHash.recommended().hash(payload.password)},"active")
+    return {"user_id":record["id"],"email":payload.email.lower(),"access_token":_jwt({"sub":record["id"],"exp":int(time.time())+3600}),"token_type":"bearer"}
+
+
+@router.post("/auth/login")
+def login_user(payload: LoginInput):
+    try:
+        from pwdlib import PasswordHash
+    except ImportError as exc:
+        raise HTTPException(503,"Install pwdlib[argon2] to enable local account authentication.") from exc
+    from app.main import list_records
+    users=[x for x in list_records("user") if x["data"].get("email","").lower()==payload.email.lower()]
+    if not users or not PasswordHash.recommended().verify(payload.password,users[0]["data"]["password_hash"]):
+        raise HTTPException(401,"Invalid email or password.")
+    user=users[0]
+    return {"user_id":user["id"],"email":payload.email.lower(),"access_token":_jwt({"sub":user["id"],"exp":int(time.time())+3600}),"token_type":"bearer"}
