@@ -350,3 +350,7 @@ async def generate_seo(payload: GenerateScriptInput) -> dict[str, Any]:
     except json.JSONDecodeError as exc:
         raise HTTPException(502, "AI provider returned invalid JSON for SEO metadata.") from exc
     return save("seo", {**payload.model_dump(), "metadata": metadata}, "draft")
+
+
+from app.advanced import router as advanced_router
+app.include_router(advanced_router)
