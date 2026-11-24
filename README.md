@@ -61,11 +61,11 @@ npm run lint
 npm run build
 ```
 
-## Provider configuration
+## Production endpoints\n\n- `POST /api/v1/scripts/generate` — provider-backed bilingual script generation.\n- `POST /api/v1/voice/generate` — ElevenLabs narration; stores an MP3 under `/media/`.\n- `POST /api/v1/render/title-card` — FFmpeg title-card MP4 render, optionally with a generated narration asset.\n- `POST /api/v1/seo/generate` — provider-backed YouTube metadata JSON.\n\nThese endpoints require server-side configuration and are not a replacement for a full multi-scene editor or a live YouTube publishing integration.\n\n## Provider configuration
 
 Copy `.env.example` to `.env` for local configuration. Keep all secrets on the API/server side. Never commit API keys or OAuth tokens.
 
-The current release provides a working local workflow foundation and provider boundaries. Research and script endpoints use clearly labelled template fallbacks until an AI/search provider is configured. Voice generation, generated media, FFmpeg rendering, real YouTube OAuth uploads, and real channel analytics require their respective provider credentials and background services; they are not simulated as successful.
+The current release includes local workflow records plus optional real production endpoints. Configure OPENAI_API_KEY for provider-backed script and SEO generation, ELEVENLABS_API_KEY plus ELEVENLABS_VOICE_ID for narration, and install FFmpeg on the API host for title-card MP4 rendering. Missing providers return explicit errors; the app does not fabricate successful assets. Live trend discovery, full timeline editing, image/video generation, YouTube OAuth uploads, and real channel analytics still require their dedicated integrations and services.
 
 ## Publishing safety
 
