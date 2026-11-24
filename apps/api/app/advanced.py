@@ -214,17 +214,12 @@ async def youtube_oauth_callback(code: str, state: str):
     token_key=os.getenv("AUTOTUBE_TOKEN_ENCRYPTION_KEY")
     if not token_key:
         raise HTTPException(503,"OAuth completed but token storage is disabled. Configure AUTOTUBE_TOKEN_ENCRYPTION_KEY and retry authorization.")
-    # Encrypt token file with authenticated stream construction; key must be a random secret.
-    key=hashlib.sha256(token_key.encode()).digest()
-    nonce=secrets.token_bytes(16)
-    raw=json.dumps(tokens).encode()
-    stream=b""
-    counter=0
-    while len(stream)<len(raw):
-        stream+=hmac.new(key,nonce+counter.to_bytes(4,"big"),hashlib.sha256).digest(); counter+=1
-    cipher=bytes(a^b for a,b in zip(raw,stream))
-    tag=hmac.new(key,nonce+cipher,hashlib.sha256).digest()
-    TOKEN_PATH.write_bytes(nonce+tag+cipher)
+    from cryptography.fernet import Fernet
+    try:
+        encryption_key=Fernet(token_key.encode())
+        TOKEN_PATH.write_bytes(encryption_key.encrypt(json.dumps(tokens).encode()))
+    except Exception as exc:
+        raise HTTPException(500,"AUTOTUBE_TOKEN_ENCRYPTION_KEY must be a valid Fernet key.") from exc
     return {"connected":True,"message":"YouTube OAuth tokens stored encrypted on this API host. You may close this page."}
 
 
@@ -234,18 +229,16 @@ async def youtube_analytics(start_date: str, end_date: str):
         raise HTTPException(401,"Connect a YouTube channel using /api/v1/auth/google/start.")
     token_key=os.getenv("AUTOTUBE_TOKEN_ENCRYPTION_KEY")
     if not token_key: raise HTTPException(503,"Token encryption key is not configured.")
-    blob=TOKEN_PATH.read_bytes(); nonce,tag,cipher=blob[:16],blob[16:48],blob[48:]
-    key=hashlib.sha256(token_key.encode()).digest()
-    if not hmac.compare_digest(tag,hmac.new(key,nonce+cipher,hashlib.sha256).digest()):
-        raise HTTPException(500,"Stored OAuth token authentication failed.")
-    stream=b""; counter=0
-    while len(stream)<len(cipher):
-        stream+=hmac.new(key,nonce+counter.to_bytes(4,"big"),hashlib.sha256).digest(); counter+=1
-    tokens=json.loads(bytes(a^b for a,b in zip(cipher,stream)))
+    from cryptography.fernet import Fernet, InvalidToken
+    try:
+        fernet=Fernet(token_key.encode())
+        tokens=json.loads(fernet.decrypt(TOKEN_PATH.read_bytes()))
+    except (InvalidToken, ValueError) as exc:
+        raise HTTPException(500,"Stored OAuth token could not be decrypted. Check AUTOTUBE_TOKEN_ENCRYPTION_KEY.") from exc
     async with httpx.AsyncClient(timeout=40) as client:
         if time.time()>tokens.get("expiry_date",0)/1000-60:
             refresh=await client.post("https://oauth2.googleapis.com/token",data={"client_id":os.getenv("YOUTUBE_CLIENT_ID"),"client_secret":os.getenv("YOUTUBE_CLIENT_SECRET"),"refresh_token":tokens.get("refresh_token"),"grant_type":"refresh_token"})
-            refresh.raise_for_status(); tokens.update(refresh.json()); TOKEN_PATH.write_bytes(nonce+tag+cipher)
+            refresh.raise_for_status(); tokens.update(refresh.json()); TOKEN_PATH.write_bytes(fernet.encrypt(json.dumps(tokens).encode()))
         response=await client.get("https://youtubeanalytics.googleapis.com/v2/reports",params={"ids":"channel==MINE","startDate":start_date,"endDate":end_date,"metrics":"views,estimatedMinutesWatched,averageViewDuration,subscribersGained","dimensions":"day","access_token":tokens["access_token"]})
         response.raise_for_status()
         return response.json()
