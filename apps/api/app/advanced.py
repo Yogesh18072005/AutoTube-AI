@@ -311,6 +311,8 @@ def youtube_oauth_start():
     try:
         state=f"{int(time.time())}.{secrets.token_urlsafe(24)}"
         signed=f"{state}.{_sign(state)}"
+        state_marker = DATA_ROOT / f".oauth-state-{hashlib.sha256(state.encode()).hexdigest()}"
+        state_marker.write_text(str(int(time.time())), encoding="utf-8")
     except ProviderNotConfigured as exc:
         raise HTTPException(503, str(exc)) from exc
     params={"client_id":client_id,"redirect_uri":redirect,"response_type":"code","scope":"https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly","access_type":"offline","prompt":"consent","state":signed}
@@ -328,7 +330,12 @@ async def youtube_oauth_callback(code: str | None = None, state: str | None = No
         raw,signature=state.rsplit(".",1)
         timestamp,nonce=raw.split(".",1)
         if not hmac.compare_digest(signature,_sign(raw)): raise ValueError("bad signature")
-        if abs(time.time()-int(timestamp)) > 600 or not nonce: raise ValueError("expired state")
+        if abs(time.time()-int(timestamp)) > 600 or not nonce:
+            raise ValueError("expired state")
+        state_marker = DATA_ROOT / f".oauth-state-{hashlib.sha256(raw.encode()).hexdigest()}"
+        if not state_marker.is_file():
+            raise ValueError("state already used or unknown")
+        state_marker.unlink()
     except Exception as exc:
         raise HTTPException(400,"Invalid OAuth state.") from exc
     async with httpx.AsyncClient(timeout=30) as client:
