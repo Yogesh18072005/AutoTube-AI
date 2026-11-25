@@ -151,7 +151,7 @@ def render_project(payload: RenderProject):
     try:
         for index, scene in enumerate(payload.scenes):
             output = work / f"scene-{index:03}.mp4"
-            title = scene.visual.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")[:180]
+            title = _escape_drawtext(scene.visual[:180])
             command = [ffmpeg, "-y", "-f", "lavfi", "-i", "color=c=0x101a2b:s=1080x1920:r=30", "-vf", f"drawtext=text='{title}':fontcolor=white:fontsize=42:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=0x00000099:boxborderw=24", "-t", str(scene.seconds), "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(output)]
             subprocess.run(command, check=True, capture_output=True, timeout=180)
             clips.append(output)
