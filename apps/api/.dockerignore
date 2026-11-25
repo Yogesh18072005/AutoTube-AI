@@ -1,0 +1,11 @@
+# Keep local secrets, generated assets and development caches out of the image build context.
+.env
+.env.*
+!.env.example
+data/
+media/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+tests/
