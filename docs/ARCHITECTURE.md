@@ -26,7 +26,7 @@ FastAPI production API :8000 (apps/api)
         - AI research brief (requires source verification)
         - AI script
         - optional ElevenLabs narration
-        - FFmpeg title-card MP4
+        - FFmpeg scene-card MP4
         - Pillow thumbnail
         - AI SEO metadata
         - video draft -> human review
@@ -90,7 +90,7 @@ The API verifies that the exact video record is approved before upload. The uplo
 - OpenAI-compatible script and SEO generation
 - ElevenLabs speech generation
 - OpenAI image generation
-- FFmpeg title-card and basic scene-card rendering
+- FFmpeg title-card and narrated scene-card rendering
 - Pillow thumbnail generation
 - Google OAuth start/callback/status and encrypted token refresh
 - Approval-gated resumable YouTube upload and scheduled publishing
@@ -101,7 +101,7 @@ The API verifies that the exact video record is approved before upload. The uplo
 ## Important scope boundaries
 
 - The worker's research output is an AI-generated brief, not a source-cited live web-research report. Verify facts before publishing.
-- The generated video in the default worker is a branded title-card MP4. It is not a complete scene-based edit with stock footage, motion graphics or automatic captions.
+- The generated video in the default worker is a branded scene-card MP4. It is not a complete scene-based edit with stock footage, motion graphics or automatic captions.
 - The basic scene-card renderer creates visual scene cards; it does not yet provide a complete editing timeline.
 - The dashboard's media and production tools expose the existing provider endpoints, but full media-library management and asset editing remain future work.
 - The Java migration backend currently implements core workspace records and AI script generation. OAuth, publishing, media and queue parity are not complete there.
