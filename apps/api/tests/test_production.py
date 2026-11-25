@@ -77,6 +77,24 @@ def test_ai_research_brief_requires_provider_credentials(monkeypatch):
     assert "OPENAI_API_KEY" in response.json()["detail"]
 
 
+def test_provider_status_reports_configuration_without_exposing_secrets(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "private-openai-value")
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "private-elevenlabs-value")
+    monkeypatch.setenv("ELEVENLABS_VOICE_ID", "voice-id")
+    monkeypatch.setenv("YOUTUBE_CLIENT_ID", "private-google-client")
+    monkeypatch.setenv("YOUTUBE_CLIENT_SECRET", "private-google-secret")
+
+    response = client.get("/api/v1/providers/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["openai_text"] is True
+    assert payload["elevenlabs_voice"] is True
+    assert payload["youtube_oauth_credentials"] is True
+    assert "private-openai-value" not in response.text
+    assert "private-google-secret" not in response.text
+
+
 def test_youtube_oauth_status_never_exposes_tokens():
     response = client.get("/api/v1/auth/google/status")
     assert response.status_code == 200
