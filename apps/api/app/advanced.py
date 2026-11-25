@@ -58,6 +58,7 @@ class RenderProject(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     scenes: list[Scene] = Field(min_length=1, max_length=30)
     captions: bool = True
+    audio_url: str | None = None
 
 
 class ThumbnailRequest(BaseModel):
@@ -148,10 +149,25 @@ def render_project(payload: RenderProject):
             subprocess.run(command, check=True, capture_output=True, timeout=180)
             clips.append(output)
         concat = work / "concat.txt"
-        concat.write_text("".join(f"file '{p.as_posix()}'\n" for p in clips), encoding="utf-8")
+        concat.write_text("".join(f"file '{p.as_posix()}'\\n" for p in clips), encoding="utf-8")
+        silent_video = work / "silent.mp4"
+        subprocess.run([ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(concat), "-c", "copy", str(silent_video)], check=True, capture_output=True, timeout=300)
         target = MEDIA_ROOT / f"video-{uuid.uuid4().hex}.mp4"
-        subprocess.run([ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(concat), "-c", "copy", str(target)], check=True, capture_output=True, timeout=300)
-        return {"url": f"/media/{target.name}", "file_name": target.name, "scenes": len(clips), "status": "rendered", "captions": "not_generated"}
+        if payload.audio_url:
+            if not payload.audio_url.startswith("/media/"):
+                raise HTTPException(400, "audio_url must refer to an asset under /media/.")
+            audio_path = (MEDIA_ROOT / Path(payload.audio_url).name).resolve()
+            if MEDIA_ROOT.resolve() not in audio_path.parents or not audio_path.is_file():
+                raise HTTPException(404, "Narration audio asset was not found in the media directory.")
+            subprocess.run(
+                [ffmpeg, "-y", "-i", str(silent_video), "-i", str(audio_path),
+                 "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac",
+                 "-shortest", "-movflags", "+faststart", str(target)],
+                check=True, capture_output=True, timeout=300,
+            )
+        else:
+            shutil.copy2(silent_video, target)
+        return {"url": f"/media/{target.name}", "file_name": target.name, "scenes": len(clips), "status": "rendered", "audio_included": bool(payload.audio_url), "captions": "not_generated"}
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or b"").decode(errors="replace")[-1200:]
         raise HTTPException(422, f"FFmpeg render failed: {detail}") from exc
