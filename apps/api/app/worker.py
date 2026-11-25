@@ -57,21 +57,54 @@ async def _generate_content(project: dict[str, Any]) -> dict[str, Any]:
     )
 
     length = "45-60 seconds" if video_format == "short" else "6-10 minutes"
+    scene_count = 6 if video_format == "short" else 20
     script_prompt = (
-        f"Write an original YouTube script about {topic} in {language_name}, for {audience}. "
-        f"Target length: {length}. Use the following research brief as background, not as proof: "
-        f"{research_text}. Include a strong hook, spoken narration, scene-by-scene visual directions, "
-        "a clear ending, and mark factual claims that need verification."
+        f"Create an original YouTube video script about {topic} in {language_name}, for {audience}. "
+        f"Target length: {length}. Use this research brief as background, not as proof: {research_text}. "
+        f"Return valid JSON only with keys full_script and scenes. Provide about {scene_count} scenes. "
+        "Each scene must have narration, a short visual direction suitable for a text-based scene card, "
+        "and seconds (2 to 30). The full_script must be the complete spoken narration. "
+        "Mark factual claims that need source verification. Do not invent citations."
     )
-    script_text = await generate_text(
+    script_response = await generate_text(
         script_prompt,
-        system="You are an experienced bilingual YouTube scriptwriter. Produce a useful, natural script.",
+        system="You are an experienced bilingual YouTube scriptwriter. Return valid JSON only.",
     )
+    try:
+        script_payload = json.loads(script_response)
+        script_text = str(script_payload["full_script"]).strip()
+        scenes = script_payload["scenes"]
+        if not script_text or not isinstance(scenes, list) or not scenes:
+            raise ValueError("Script JSON is missing full_script or scenes.")
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        script_text = script_response.strip()
+        paragraphs = [part.strip() for part in script_text.split("\\n\\n") if part.strip()]
+        scene_source = paragraphs or [script_text]
+        scenes = [
+            {
+                "narration": paragraph,
+                "visual": f"Scene {index + 1}: {topic}",
+                "seconds": 8 if video_format == "short" else 30,
+            }
+            for index, paragraph in enumerate(scene_source[:30])
+        ]
+    scenes = [
+        {
+            "narration": str(scene.get("narration", ""))[:3000],
+            "visual": str(scene.get("visual", topic))[:240],
+            "seconds": max(2, min(int(scene.get("seconds", 8)), 30)),
+        }
+        for scene in scenes[:30]
+        if isinstance(scene, dict) and str(scene.get("narration", "")).strip()
+    ]
+    if not scenes:
+        scenes = [{"narration": script_text[:3000], "visual": topic[:240], "seconds": 8}]
     script = save(
         "script",
         {
             **project,
             "full_text": script_text,
+            "scenes": scenes,
             "research_id": research["id"],
             "generation_mode": "openai",
             "provider": "openai-compatible",
@@ -94,22 +127,25 @@ async def _generate_content(project: dict[str, Any]) -> dict[str, Any]:
             },
             "ready",
         )
-        voice_note = "Narration generated with ElevenLabs."
+        voice_note = "Narration generated with ElevenLabs and attached to the scene-card render."
 
-    from app.production import render_title_card, public_media_url
-    audio_path = None
-    if voice_asset:
-        from app.production import MEDIA_ROOT
-        audio_path = str(MEDIA_ROOT / voice_asset["data"]["file_name"])
-    video_path = render_title_card(topic, duration_seconds=8, audio_path=audio_path)
+    from app.advanced import RenderProject, Scene, render_project
+    render_payload = RenderProject(
+        title=topic[:100],
+        scenes=[Scene(**scene) for scene in scenes],
+        audio_url=voice_asset["data"]["url"] if voice_asset else None,
+    )
+    video_result = render_project(render_payload)
     video_asset = save(
         "asset",
         {
             "asset_type": "video",
-            "file_name": video_path.name,
-            "url": public_media_url(video_path),
+            "file_name": video_result["file_name"],
+            "url": video_result["url"],
             "mime_type": "video/mp4",
-            "render_type": "branded_title_card",
+            "render_type": "scene_card_video",
+            "scene_count": video_result["scenes"],
+            "audio_included": video_result["audio_included"],
         },
         "rendered",
     )
@@ -154,7 +190,7 @@ async def _generate_content(project: dict[str, Any]) -> dict[str, Any]:
             "voice_asset_url": voice_asset["data"]["url"] if voice_asset else None,
             "tags": seo_metadata.get("tags", []),
             "production_notes": [
-                "The generated MP4 is a branded title-card render, not a full scene-based edit.",
+                "The MP4 uses generated text-based scene cards; it does not include stock footage or motion graphics.",
                 "Review the script, metadata, visual assets, and factual claims before approval.",
                 voice_note,
             ],
