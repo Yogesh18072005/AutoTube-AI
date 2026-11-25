@@ -20,6 +20,7 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       AUTOTUBE_MEDIA_DIR: /app/media
       AUTOTUBE_DB_PATH: /app/data/autotube.db
+      AUTOTUBE_DATA_DIR: /app/data
       REDIS_URL: redis://redis:6379/0
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
