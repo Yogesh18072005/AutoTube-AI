@@ -16,7 +16,11 @@ coverage/
 uploads/
 renders/
 
-# Generated files
+# Generated files and private runtime data
+apps/api/media/
+apps/api/data/
+*.enc
+.oauth-state-*
 apps/api/*.egg-info/
 apps/backend/target/
 apps/web/node_modules/
