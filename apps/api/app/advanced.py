@@ -303,7 +303,12 @@ def youtube_oauth_start():
 
 
 @router.get("/auth/google/callback")
-async def youtube_oauth_callback(code: str, state: str):
+async def youtube_oauth_callback(code: str | None = None, state: str | None = None, error: str | None = None):
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+    if error:
+        return RedirectResponse(url=f"{frontend_url}/?youtube=denied", status_code=303)
+    if not code or not state:
+        raise HTTPException(400, "Google OAuth callback is missing its authorization code or state.")
     try:
         raw,signature=state.rsplit(".",1)
         timestamp,nonce=raw.split(".",1)
@@ -323,7 +328,7 @@ async def youtube_oauth_callback(code: str, state: str):
         TOKEN_PATH.write_bytes(encryption_key.encrypt(json.dumps(tokens).encode()))
     except Exception as exc:
         raise HTTPException(500,"AUTOTUBE_TOKEN_ENCRYPTION_KEY must be a valid Fernet key.") from exc
-    return {"connected":True,"message":"YouTube OAuth tokens stored encrypted on this API host. You may close this page."}
+    return RedirectResponse(url=f"{frontend_url}/?youtube=connected", status_code=303)
 
 
 @router.get("/auth/google/status")
