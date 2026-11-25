@@ -120,6 +120,7 @@ Open **Approval Queue** and review the generated record. Only approve a video af
 ## API highlights
 
 | Method | Endpoint | Purpose |
+| GET | `/api/v1/providers/status` | Safe provider readiness checks (never exposes secret values) |
 |---|---|---|
 | GET | `/health` | Health check |
 | POST | `/api/v1/research/brief` | Credential-backed AI research brief (verify factual claims) |
