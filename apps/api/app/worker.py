@@ -73,7 +73,7 @@ async def _generate_content(project: dict[str, Any]) -> dict[str, Any]:
     try:
         clean_response = script_response.strip()
         if clean_response.startswith("```"):
-            clean_response = clean_response.split("\\n", 1)[-1].removesuffix("```").strip()
+            clean_response = clean_response.split("\n", 1)[-1].removesuffix("```").strip()
         script_payload = json.loads(clean_response)
         script_text = str(script_payload["full_script"]).strip()
         scenes = script_payload["scenes"]
