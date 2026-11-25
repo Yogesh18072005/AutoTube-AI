@@ -10,20 +10,39 @@ permissions:
   contents: read
 
 jobs:
+  python-api:
+    name: Python API tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/api/pyproject.toml
+      - name: Install API and test dependencies
+        working-directory: apps/api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run API tests
+        working-directory: apps/api
+        run: pytest -q
+
   backend:
     name: Java backend tests
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
-
       - name: Run backend tests
         working-directory: apps/backend
         run: mvn --batch-mode --no-transfer-progress test
@@ -34,26 +53,21 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
-
       - name: Install frontend dependencies
         working-directory: apps/web
         run: npm ci
-
       - name: Run ESLint
         working-directory: apps/web
         run: npm run lint
-
       - name: Check TypeScript
         working-directory: apps/web
         run: npm run typecheck
-
       - name: Build frontend
         working-directory: apps/web
         run: npm run build
