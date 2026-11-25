@@ -105,7 +105,7 @@ export default function Home() {
 
         {active === "settings" && <><div className="intro"><span className="eyebrow">WORKSPACE CONFIGURATION</span><h2>Settings & Providers</h2><p>Choose defaults and connect providers through server environment variables. Never paste secret keys into the browser.</p></div><div className="form-card"><label>Channel name<input value={settings.channel_name} onChange={e=>setSettings({...settings,channel_name:e.target.value})} placeholder="Your YouTube channel"/></label><div className="form-row"><label>Default language<select value={settings.default_language} onChange={e=>setSettings({...settings,default_language:e.target.value})}><option value="en">English</option><option value="hi">Hindi</option></select></label><label>Default format<select value={settings.default_format} onChange={e=>setSettings({...settings,default_format:e.target.value})}><option value="short">Shorts</option><option value="long">Long-form</option></select></label></div><div className="form-row"><label>AI provider<select value={settings.ai_provider} onChange={e=>setSettings({...settings,ai_provider:e.target.value})}><option value="none">Not connected</option><option value="openai">OpenAI</option><option value="google">Google</option><option value="other">Other / custom</option></select></label><label>Voice provider<select value={settings.tts_provider} onChange={e=>setSettings({...settings,tts_provider:e.target.value})}><option value="none">Not connected</option><option value="elevenlabs">ElevenLabs</option><option value="google">Google</option><option value="other">Other / custom</option></select></label></div><button className="primary-button" disabled={loading} onClick={()=>void saveSettings()}>Save settings</button></div></>}
 
-        {["channels","voice","media","editor","thumbnails","seo","automation"].includes(active) && <ModulePanel active={active} onCreateVideo={()=>setActive("approval")} />}
+        {["channels","voice","media","editor","thumbnails","seo","automation"].includes(active) && <ModulePanel active={active} />}
       </section>
     </main>
   );
@@ -116,7 +116,7 @@ function RecordList({items,onApprove,onReject,onSchedule}:{items:Item[];onApprov
   return <div className="record-list">{items.map(item=><article className="record-card" key={item.id}><div className="record-main"><span className="record-kind">{item.kind.toUpperCase()} · {String(item.data.language ?? "EN")} · {String(item.data.format ?? "—")}</span><h3>{String(item.data.topic ?? item.data.title ?? "Untitled item")}</h3><p>{String(item.data.full_text ?? item.data.provider_message ?? item.data.description ?? item.data.angle ?? "Workspace item")}</p><span className={"status status-"+item.status}>{item.status.replaceAll("_"," ")}</span></div><div className="record-actions">{onApprove&&<button className="small-primary" onClick={()=>onApprove(item.id)}>Approve</button>}{onReject&&<button className="small-quiet" onClick={()=>onReject(item.id)}>Request changes</button>}{onSchedule&&item.status==="approved"&&<button className="small-primary" onClick={()=>onSchedule(item.id)}>Schedule</button>}</div></article>)}</div>;
 }
 
-function ModulePanel({active,onCreateVideo}:{active:string;onCreateVideo:()=>void}) {
+function ModulePanel({active}:{active:string}) {
   const [voiceText,setVoiceText] = useState("");
   const [title,setTitle] = useState("");
   const [seoTopic,setSeoTopic] = useState("");
@@ -180,6 +180,6 @@ function ModulePanel({active,onCreateVideo}:{active:string;onCreateVideo:()=>voi
     {active==="thumbnails"&&<><label className="tool-label">Thumbnail title<input value={seoTopic} onChange={e=>setSeoTopic(e.target.value)} placeholder="Enter thumbnail title"/></label><button className="primary-button" disabled={busy||!seoTopic.trim()} onClick={()=>void run("/api/v1/thumbnails/generate",{title:seoTopic,subtitle:"AutoTube AI"},"Thumbnail generated.")}>{busy?"Generating…":"Generate thumbnail"}</button></>}
     {active==="media"&&<><label className="tool-label">Image prompt<textarea value={seoTopic} onChange={e=>setSeoTopic(e.target.value)} placeholder="Describe the visual asset you need..." rows={4}/></label><button className="primary-button" disabled={busy||seoTopic.trim().length<5} onClick={()=>void run("/api/v1/media/image",{prompt:seoTopic},"Image generated.")}>{busy?"Generating…":"Generate image asset"}</button></>}
     {notice&&<div className={notice.includes("not configured")||notice.includes("requires")?"notice warning":"notice"}>{notice}</div>}
-    {result&&<pre className="result-json">{JSON.stringify(result,null,2)}</pre>}
+    {result !== null && <pre className="result-json">{JSON.stringify(result,null,2)}</pre>}
   </div></>;
 }
