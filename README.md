@@ -11,8 +11,8 @@ AutoTube AI combines a Next.js creator dashboard, a FastAPI production API, a Re
 - **SEO metadata:** provider-generated titles, descriptions, tags and hashtags.
 - **Voice generation:** ElevenLabs MP3 generation when an API key and voice ID are configured.
 - **Media generation:** OpenAI image generation and local 1280×720 thumbnail generation.
-- **Video rendering:** FFmpeg title-card MP4 rendering and a basic scene-card renderer. This is a starter renderer, not a full nonlinear video editor.
-- **Background production:** Redis/Celery worker creates a research brief, script, optional narration, title-card video, thumbnail, SEO metadata and a video draft.
+- **Video rendering:** FFmpeg title-card rendering and a multi-scene text-card renderer with optional narration audio. This is a starter renderer, not a full nonlinear video editor.
+- **Background production:** Redis/Celery worker creates a research brief, structured script, optional narration, multi-scene text-card video, thumbnail, SEO metadata and a video draft.
 - **YouTube channel connection:** Google OAuth with encrypted token storage outside the public media directory.
 - **YouTube publishing:** resumable upload and scheduled publication for an approved video that references a generated MP4 asset.
 - **YouTube analytics:** Analytics API endpoint after channel authorization.
@@ -116,7 +116,7 @@ Open **Channels** in the dashboard and select **Connect YouTube with Google**. C
 
 Open **Automation**, enter a topic and start the pipeline. The worker uses the configured OpenAI provider and creates a research brief, script, title-card MP4, thumbnail, SEO draft and video review record. If ElevenLabs credentials are present, it also creates narration audio.
 
-The generated MP4 is a branded title-card starter render. Review and replace/add scene visuals as needed; this project is not a full automatic stock-footage editor. Research output is an AI brief and must be fact-checked; it is not live sourced research.
+The automation MP4 is a sequence of text-based scene cards with optional generated narration. It is not a full automatic stock-footage editor and does not add motion graphics or automatic captions. Research output is an AI brief and must be fact-checked; it is not live sourced research.
 
 ### 7. Approve and schedule
 
