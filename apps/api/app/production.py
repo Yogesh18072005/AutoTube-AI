@@ -71,7 +71,9 @@ def render_title_card(title: str, *, duration_seconds: int = 5, audio_path: str 
         raise ProviderNotConfigured("FFmpeg was not found. Install FFmpeg and add it to PATH.")
     duration = max(3, min(duration_seconds, 30))
     safe_title = re.sub(r"[^\w .,!?-]", "", title).strip()[:100] or "AutoTube AI"
-    draw_text = safe_title.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+    draw_text = safe_title.replace("\\\\", "\\\\\\\\")
+    for character in [":", "'", ",", ";", "[", "]", "%"]:
+        draw_text = draw_text.replace(character, "\\\\" + character)
     output = MEDIA_ROOT / f"render-{uuid.uuid4().hex}.mp4"
     command = [
         ffmpeg, "-y", "-f", "lavfi", "-i",
