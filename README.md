@@ -122,6 +122,8 @@ Open **Approval Queue** and review the generated record. Only approve a video af
 | Method | Endpoint | Purpose |
 |---|---|---|
 | GET | `/health` | Health check |
+| POST | `/api/v1/research/brief` | Credential-backed AI research brief (verify factual claims) |
+| GET | `/api/v1/research/trends` | Recent YouTube trend candidates (optional Data API key) |
 | POST | `/api/v1/scripts/generate` | AI script generation |
 | POST | `/api/v1/voice/generate` | ElevenLabs narration |
 | POST | `/api/v1/media/image` | OpenAI image generation |
@@ -133,7 +135,7 @@ Open **Approval Queue** and review the generated record. Only approve a video af
 | POST | `/api/v1/automation/queue` | Queue a production job |
 | GET | `/api/v1/automation/jobs/{job_id}` | Read job status/result |
 | POST | `/api/v1/publishing/{video_id}/schedule` | Approval-gated YouTube upload/schedule |
-| GET | `/api/v1/analytics/youtube` | YouTube Analytics report |
+| GET | `/api/v1/analytics/youtube` | Live YouTube Analytics report |
 | GET | `/api/v1/research/trends` | Recent YouTube trend candidates |
 
 ## Optional Java migration backend
