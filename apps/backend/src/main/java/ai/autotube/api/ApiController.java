@@ -119,6 +119,35 @@ public class ApiController {
         return records.create("script", "script_draft", result);
     }
 
+    @PostMapping("/api/v1/seo/generate")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Map<String,Object> generateSeo(@RequestBody Map<String,Object> body) {
+        requireTopic(body);
+        String topic = String.valueOf(body.get("topic")).trim();
+        List<String> tags = Arrays.stream(topic.toLowerCase(Locale.ROOT).split("[^a-z0-9]+"))
+                .filter(word -> word.length() > 2).distinct().limit(8).toList();
+        Map<String,Object> result = new LinkedHashMap<>(body);
+        result.put("suggested_title", topic + " explained simply");
+        result.put("description", "Learn the basics of " + topic + " in this beginner-friendly video. Subscribe for more practical technology explainers.");
+        result.put("tags", tags);
+        result.put("hashtags", tags.stream().limit(3).map(tag -> "#" + tag).toList());
+        result.put("generation_mode", "template_fallback");
+        result.put("provider_message", "Starter SEO metadata. AI keyword research and live search-volume data are not connected yet.");
+        return records.create("seo", "seo_draft", result);
+    }
+
+    @PostMapping("/api/v1/voice/generate")
+    public Map<String,Object> generateVoice(@RequestBody Map<String,Object> body) {
+        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED,
+                "Voice generation is not migrated to the Java backend yet. No audio was generated.");
+    }
+
+    @PostMapping("/api/v1/render/title-card")
+    public Map<String,Object> renderTitleCard(@RequestBody Map<String,Object> body) {
+        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED,
+                "FFmpeg rendering is not migrated to the Java backend yet. No video was rendered.");
+    }
+
     @PostMapping("/api/v1/videos")
     @ResponseStatus(HttpStatus.CREATED)
     public Map<String,Object> video(@RequestBody Map<String,Object> body) {
