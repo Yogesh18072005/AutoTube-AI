@@ -196,8 +196,11 @@ def youtube_oauth_start():
     redirect=os.getenv("YOUTUBE_REDIRECT_URI","http://localhost:8000/api/v1/auth/google/callback")
     if not client_id or not os.getenv("YOUTUBE_CLIENT_SECRET"):
         raise HTTPException(503,"Configure YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET.")
-    state=secrets.token_urlsafe(32)
-    signed=f"{state}.{_sign(state)}"
+    try:
+        state=secrets.token_urlsafe(32)
+        signed=f"{state}.{_sign(state)}"
+    except ProviderNotConfigured as exc:
+        raise HTTPException(503, str(exc)) from exc
     params={"client_id":client_id,"redirect_uri":redirect,"response_type":"code","scope":"https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly","access_type":"offline","prompt":"consent","state":signed}
     return {"authorization_url":"https://accounts.google.com/o/oauth2/v2/auth?"+urlencode(params),"state":signed}
 
