@@ -1,115 +1,135 @@
-# AutoTube AI — Architecture
+# AutoTube AI — Architecture and implementation map
 
-## Product scope
+## Runtime topology
 
-AutoTube AI is a bilingual (English/Hindi) workspace for planning and managing YouTube Shorts and long-form video content. The current repository contains a Next.js dashboard, a Java Spring Boot API, PostgreSQL persistence, an optional OpenAI-compatible script-generation adapter, and a legacy FastAPI service retained during migration.
-
-The application is a development-stage MVP, not a production YouTube automation service.
-
-## System overview
+The default local stack is a Python production API plus a Redis-backed Celery worker. The Java Spring Boot service is retained as an optional migration backend and is not yet feature-parity with the production API.
 
 ```text
 Browser
   |
   v
 Next.js 15 / React 19 dashboard (apps/web)
-  |
   | HTTP / JSON, NEXT_PUBLIC_API_URL
   v
-Spring Boot 3.5 / Java 21 API (apps/backend)
-  |                         |
-  | Spring Data JPA         | OpenAI-compatible Chat Completions
-  v                         v
-PostgreSQL              Configured AI provider
+FastAPI production API :8000 (apps/api)
+  |-- SQLite records database (/app/data volume)
+  |-- encrypted Google OAuth tokens (/app/data volume)
+  |-- generated assets (/app/media volume; served as /media)
+  |-- OpenAI-compatible text + image adapters
+  |-- ElevenLabs speech adapter
+  |-- YouTube OAuth, Data API, upload and Analytics adapters
   |
-  +-- content_records (ideas, research, scripts, videos, settings)
+  +---- Redis broker / result backend
+             |
+             v
+        Celery worker
+        - AI research brief (requires source verification)
+        - AI script
+        - optional ElevenLabs narration
+        - FFmpeg title-card MP4
+        - Pillow thumbnail
+        - AI SEO metadata
+        - video draft -> human review
 
-Redis service: provisioned in Docker Compose; application-level job orchestration is not yet implemented.
-FastAPI service (apps/api): legacy implementation retained during migration; it is not the primary API in the current Java-backed dashboard.
+Optional migration profile:
+Browser / developer -> Java Spring Boot :8001 -> PostgreSQL
 ```
 
-## Current modules and implementation status
+## Runtime services
 
-| Module | Current implementation |
-|---|---|
-| Dashboard | Next.js workspace navigation, pipeline metrics, forms and record lists |
-| Ideas | Topic records persisted through the Java API |
-| Research | Structured starter brief and hook suggestions; no live source discovery |
-| Script Studio | Template draft endpoint plus optional server-side AI generation |
-| Video records | Create, list, approve and request-changes workflow |
-| SEO Studio | Starter title, description, tags and hashtags; no live keyword data |
-| Analytics | Workspace record counts; YouTube channel metrics are not connected |
-| Settings | Workspace defaults persisted as records |
-| Publishing | Server checks approval, then returns an explicit not-implemented response |
-| Voice, rendering, thumbnails | UI guidance/placeholders; provider and rendering integrations are pending |
-| Automation | Workflow outline only; durable background workers and retries are pending |
+| Service | Default | Responsibility |
+|---|---:|---|
+| `api` | 8000 | FastAPI REST API and provider adapters |
+| `worker` | internal | Celery content-production tasks |
+| `redis` | 6379 | Celery broker and result backend |
+| `java-api` | 8001 (profile only) | Spring Boot migration service |
+| `postgres` | 5432 (profile only) | Java migration database |
 
-## API surface
+The default FastAPI implementation currently uses SQLite records stored in a Docker volume. PostgreSQL is used by the optional Java service; the two backends do not share records.
 
-The Java service listens on port 8000 by default.
+## Provider integrations and required configuration
 
-| Method | Endpoint | Purpose |
+| Feature | Provider / dependency | Environment |
 |---|---|---|
-| GET | `/health` | Service health |
-| GET | `/api/v1/config` | Supported languages, formats and modules |
-| GET | `/api/v1/records` | List workspace records; optional `kind` filter |
-| GET / PUT | `/api/v1/settings` | Read or save workspace defaults |
-| POST | `/api/v1/ideas` | Save an idea |
-| POST | `/api/v1/research` | Create a starter research brief |
-| POST | `/api/v1/scripts` | Create a template script |
-| POST | `/api/v1/scripts/generate` | Generate a script through configured AI provider |
-| POST | `/api/v1/seo/generate` | Create starter SEO metadata |
-| POST | `/api/v1/videos` | Create a video draft |
-| POST | `/api/v1/videos/{id}/approve` | Approve a video record |
-| POST | `/api/v1/videos/{id}/reject` | Request changes |
-| POST | `/api/v1/publishing/{id}/schedule` | Approval-gated; live publishing is not implemented |
-| GET | `/api/v1/analytics/overview` | Workspace pipeline totals |
-
-Voice generation and title-card rendering endpoints intentionally return HTTP 501 until their integrations are migrated.
+| AI research brief, script and SEO | OpenAI-compatible Chat Completions | `OPENAI_API_KEY`, optional base URL/model |
+| Image generation | OpenAI Images API | `OPENAI_API_KEY`, `OPENAI_IMAGE_MODEL` |
+| Voice generation | ElevenLabs | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` |
+| Thumbnail generation | Pillow (local) | no external credential |
+| MP4 title-card rendering | FFmpeg (installed in API image) | no external credential |
+| YouTube OAuth and upload | Google OAuth + YouTube Data API v3 | `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REDIRECT_URI` |
+| YouTube Analytics | YouTube Analytics API | same OAuth connection |
+| YouTube trend candidates | YouTube Data API key | `YOUTUBE_DATA_API_KEY` |
+| OAuth state signing | HMAC | `AUTOTUBE_SECRET_KEY` |
+| OAuth token encryption | Fernet | `AUTOTUBE_TOKEN_ENCRYPTION_KEY` |
+| Background jobs | Redis/Celery | `REDIS_URL` |
 
 ## Content lifecycle and approval boundary
 
 ```text
-IDEA -> RESEARCH BRIEF -> SCRIPT DRAFT -> VIDEO REVIEW
-                                      |          |
-                                      |          +-> CHANGES REQUESTED
-                                      |          |
-                                      +----------+-> APPROVED
-                                                     |
-                                                     v
-                                       PUBLISHING ADAPTER (pending)
+TOPIC -> AI RESEARCH BRIEF -> SCRIPT -> OPTIONAL VOICE
+                                      |
+                                      v
+                              TITLE-CARD MP4
+                                      |
+                         THUMBNAIL + SEO METADATA
+                                      |
+                                      v
+                                VIDEO REVIEW
+                                 /        \
+                         CHANGES         APPROVED
+                                             |
+                                             v
+                                 YOUTUBE UPLOAD / SCHEDULE
 ```
 
-The Java API checks the persisted video status before accepting a scheduling request. An unapproved video receives HTTP 409. An approved video currently receives HTTP 501 because YouTube OAuth upload and scheduling have not been implemented. The UI is not treated as the security boundary.
+The API verifies that the exact video record is approved before upload. The upload route requires a rendered asset under `/media/` and an authorized YouTube connection. Scheduled uploads remain private and include YouTube's `publishAt` value. The worker never approves or publishes its own draft.
 
-## Local development
+## Implemented API groups
 
-From the repository root:
+- Workspace records, ideas, research and script drafts
+- OpenAI-compatible script and SEO generation
+- ElevenLabs speech generation
+- OpenAI image generation
+- FFmpeg title-card and basic scene-card rendering
+- Pillow thumbnail generation
+- Google OAuth start/callback/status and encrypted token refresh
+- Approval-gated resumable YouTube upload and scheduled publishing
+- YouTube Analytics report endpoint
+- YouTube trend discovery endpoint
+- Celery pipeline queue and job result endpoint
 
-1. Copy `.env.example` to `.env` and set local values if needed.
-2. Start PostgreSQL, Redis and the Java API with `docker compose up --build`.
-3. In another terminal, run `cd apps/web`, `npm ci`, then `npm run dev`.
-4. Open `http://localhost:3000`. The dashboard calls the API at `http://localhost:8000` by default.
+## Important scope boundaries
 
-To run Java tests locally: `cd apps/backend; mvn test`.
+- The worker's research output is an AI-generated brief, not a source-cited live web-research report. Verify facts before publishing.
+- The generated video in the default worker is a branded title-card MP4. It is not a complete scene-based edit with stock footage, motion graphics or automatic captions.
+- The basic scene-card renderer creates visual scene cards; it does not yet provide a complete editing timeline.
+- The dashboard's media and production tools expose the existing provider endpoints, but full media-library management and asset editing remain future work.
+- The Java migration backend currently implements core workspace records and AI script generation. OAuth, publishing, media and queue parity are not complete there.
 
-## Continuous integration
+## Local setup
 
-GitHub Actions runs Java tests and frontend lint, type-check and production-build checks for pushes and pull requests targeting `main`.
+1. Copy `.env.example` to `.env`.
+2. Generate `AUTOTUBE_SECRET_KEY` with Python's `secrets.token_urlsafe(48)`.
+3. Generate `AUTOTUBE_TOKEN_ENCRYPTION_KEY` with `Fernet.generate_key()`.
+4. Add the provider credentials required for the features you intend to use.
+5. Configure Google OAuth's authorized redirect URI as `http://localhost:8000/api/v1/auth/google/callback`.
+6. Run `docker compose up --build`.
+7. Run the dashboard from `apps/web` with `npm ci`, `NEXT_PUBLIC_API_URL=http://localhost:8000`, and `npm run dev`.
 
-## Planned production work
+## CI
 
-- Authentication, per-user authorization, audit logs and rate limits
-- Database migrations and tenant-aware data ownership
-- Redis-backed job queue, retries and worker monitoring
-- Provider adapters for live research, narration, image generation and video rendering
-- Durable media storage and asset provenance
-- YouTube OAuth, secure token storage, upload reconciliation and Analytics API ingestion
-- Deployment configuration, observability, backup and operational documentation
+GitHub Actions runs:
+- Python API tests (Python 3.12)
+- Java backend tests (Java 21)
+- Frontend ESLint, TypeScript and production build (Node 22)
 
-## Security and reliability principles
+## Security / production checklist
 
-- Keep provider credentials in server-side environment variables; never expose secrets through `NEXT_PUBLIC_*` variables.
-- Do not claim an asset, upload, or analytics result exists unless the integration actually produced it.
-- Keep human approval as a server-enforced prerequisite for publishing.
-- Surface provider and service failures instead of silently reporting success.
+- Keep API keys and OAuth client secrets out of source control and browser bundles.
+- Keep OAuth tokens encrypted outside the static media directory.
+- Back up `/app/data` and `/app/media`; keep the same Fernet key when restoring.
+- Use HTTPS and a production OAuth redirect URI for deployment.
+- Add authentication and per-user authorization before multi-user hosting.
+- Add tenant isolation, CSRF protection for browser sessions, rate limiting, audit logs and operational monitoring.
+- Move SQLite and local media to managed production storage before scaling.
+- Monitor provider quotas, costs, upload failures and Celery retries.
