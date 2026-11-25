@@ -1,24 +1,29 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 
-client = TestClient(app)
+
+@pytest.fixture()
+def client():
+    with TestClient(app) as test_client:
+        yield test_client
 
 
-def test_health():
+def test_health(client):
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
 
-def test_config_exposes_all_workspace_modules():
+def test_config_exposes_all_workspace_modules(client):
     response = client.get("/api/v1/config")
     assert response.status_code == 200
     assert "approval" in response.json()["modules"]
     assert response.json()["publishing_requires_approval"] is True
 
 
-def test_unapproved_video_cannot_be_scheduled(monkeypatch):
+def test_unapproved_video_cannot_be_scheduled(client, monkeypatch):
     monkeypatch.delenv("YOUTUBE_CLIENT_ID", raising=False)
     monkeypatch.delenv("YOUTUBE_CLIENT_SECRET", raising=False)
     video = client.post(
@@ -36,7 +41,7 @@ def test_unapproved_video_cannot_be_scheduled(monkeypatch):
     assert "approve" in response.json()["detail"].lower()
 
 
-def test_approved_video_still_requires_youtube_credentials(monkeypatch):
+def test_approved_video_still_requires_youtube_credentials(client, monkeypatch):
     monkeypatch.delenv("YOUTUBE_CLIENT_ID", raising=False)
     monkeypatch.delenv("YOUTUBE_CLIENT_SECRET", raising=False)
     video = client.post("/api/v1/videos", json={"title": "OAuth test"})
