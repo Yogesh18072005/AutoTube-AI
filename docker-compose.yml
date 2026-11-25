@@ -1,38 +1,114 @@
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+    restart: unless-stopped
+    environment:
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      AUTOTUBE_MEDIA_DIR: /app/media
+      AUTOTUBE_DB_PATH: /app/data/autotube.db
+      REDIS_URL: redis://redis:6379/0
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-gpt-image-1}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      ELEVENLABS_VOICE_ID: ${ELEVENLABS_VOICE_ID:-}
+      ELEVENLABS_MODEL: ${ELEVENLABS_MODEL:-eleven_multilingual_v2}
+      YOUTUBE_CLIENT_ID: ${YOUTUBE_CLIENT_ID:-}
+      YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET:-}
+      YOUTUBE_REDIRECT_URI: ${YOUTUBE_REDIRECT_URI:-http://localhost:8000/api/v1/auth/google/callback}
+      YOUTUBE_DATA_API_KEY: ${YOUTUBE_DATA_API_KEY:-}
+      AUTOTUBE_SECRET_KEY: ${AUTOTUBE_SECRET_KEY:-}
+      AUTOTUBE_TOKEN_ENCRYPTION_KEY: ${AUTOTUBE_TOKEN_ENCRYPTION_KEY:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - autotube_media:/app/media
+      - autotube_data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./apps/api
+    restart: unless-stopped
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=INFO"]
+    environment:
+      AUTOTUBE_MEDIA_DIR: /app/media
+      AUTOTUBE_DB_PATH: /app/data/autotube.db
+      REDIS_URL: redis://redis:6379/0
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      ELEVENLABS_VOICE_ID: ${ELEVENLABS_VOICE_ID:-}
+      ELEVENLABS_MODEL: ${ELEVENLABS_MODEL:-eleven_multilingual_v2}
+    volumes:
+      - autotube_media:/app/media
+      - autotube_data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+
   postgres:
     image: postgres:16-alpine
+    profiles: ["java-migration"]
+    restart: unless-stopped
     environment:
       POSTGRES_DB: autotube
       POSTGRES_USER: autotube
-      POSTGRES_PASSWORD: autotube_dev
-    ports: ["5432:5432"]
-    volumes: ["postgres_data:/var/lib/postgresql/data"]
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-autotube_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U autotube -d autotube"]
       interval: 5s
       timeout: 5s
       retries: 10
-  redis:
-    image: redis:7-alpine
-    ports: ["6379:6379"]
-    volumes: ["redis_data:/data"]
-  api:
-    build: ./apps/backend
+
+  java-api:
+    build:
+      context: ./apps/backend
+    profiles: ["java-migration"]
+    restart: unless-stopped
     environment:
       API_PORT: 8000
       DATABASE_URL: jdbc:postgresql://postgres:5432/autotube
       DATABASE_USERNAME: autotube
-      DATABASE_PASSWORD: autotube_dev
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-autotube_dev}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      CORS_ORIGINS: http://localhost:3000
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-    ports: ["8000:8000"]
+    ports:
+      - "8001:8000"
     depends_on:
-      postgres: {condition: service_healthy}
-      redis: {condition: service_started}
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
-  postgres_data:
   redis_data:
+  autotube_media:
+  autotube_data:
+  postgres_data:
