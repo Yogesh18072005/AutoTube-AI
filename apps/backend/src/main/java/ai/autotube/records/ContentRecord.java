@@ -7,7 +7,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "content_records", indexes = {
         @Index(name = "idx_content_kind_status", columnList = "kind,status"),
-        @Index(name = "idx_content_created", columnList = "createdAt")
+        @Index(name = "idx_content_created", columnList = "created_at")
 })
 public class ContentRecord {
     @Id
@@ -18,9 +18,9 @@ public class ContentRecord {
     private String status;
     @Column(nullable = false, columnDefinition = "text")
     private String data;
-    @Column(nullable = false)
+    @Column(name = "created_at", nullable = false)
     private Instant createdAt;
-    @Column(nullable = false)
+    @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     protected ContentRecord() {}
