@@ -21,7 +21,9 @@ from pydantic import BaseModel, Field
 from app.production import MEDIA_ROOT, ProviderNotConfigured
 
 router = APIRouter(prefix="/api/v1", tags=["advanced"])
-TOKEN_PATH = MEDIA_ROOT / ".youtube-token.json"
+DATA_ROOT = Path(os.getenv("AUTOTUBE_DATA_DIR", str(MEDIA_ROOT.parent / "data")))
+DATA_ROOT.mkdir(parents=True, exist_ok=True)
+TOKEN_PATH = DATA_ROOT / ".youtube-token.enc"
 
 
 def _secret() -> str:
@@ -211,6 +213,7 @@ async def youtube_oauth_callback(code: str, state: str):
         response=await client.post("https://oauth2.googleapis.com/token",data={"code":code,"client_id":os.getenv("YOUTUBE_CLIENT_ID"),"client_secret":os.getenv("YOUTUBE_CLIENT_SECRET"),"redirect_uri":os.getenv("YOUTUBE_REDIRECT_URI","http://localhost:8000/api/v1/auth/google/callback"),"grant_type":"authorization_code"})
         response.raise_for_status()
         tokens=response.json()
+        tokens["expiry_date"] = int((time.time() + tokens.get("expires_in", 3600)) * 1000)
     token_key=os.getenv("AUTOTUBE_TOKEN_ENCRYPTION_KEY")
     if not token_key:
         raise HTTPException(503,"OAuth completed but token storage is disabled. Configure AUTOTUBE_TOKEN_ENCRYPTION_KEY and retry authorization.")
@@ -257,7 +260,7 @@ async def youtube_analytics(start_date: str, end_date: str):
     async with httpx.AsyncClient(timeout=40) as client:
         if time.time()>tokens.get("expiry_date",0)/1000-60:
             refresh=await client.post("https://oauth2.googleapis.com/token",data={"client_id":os.getenv("YOUTUBE_CLIENT_ID"),"client_secret":os.getenv("YOUTUBE_CLIENT_SECRET"),"refresh_token":tokens.get("refresh_token"),"grant_type":"refresh_token"})
-            refresh.raise_for_status(); tokens.update(refresh.json()); TOKEN_PATH.write_bytes(fernet.encrypt(json.dumps(tokens).encode()))
+            refresh.raise_for_status(); refreshed=refresh.json(); refreshed["expiry_date"]=int((time.time()+refreshed.get("expires_in",3600))*1000); tokens.update(refreshed); TOKEN_PATH.write_bytes(fernet.encrypt(json.dumps(tokens).encode()))
         response=await client.get("https://youtubeanalytics.googleapis.com/v2/reports",params={"ids":"channel==MINE","startDate":start_date,"endDate":end_date,"metrics":"views,estimatedMinutesWatched,averageViewDuration,subscribersGained","dimensions":"day"},headers={"Authorization":f"Bearer {tokens['access_token']}"})
         response.raise_for_status()
         return response.json()
@@ -320,7 +323,7 @@ async def upload_approved_video(payload: YouTubeUploadInput):
     async with httpx.AsyncClient(timeout=180) as client:
         if time.time()>tokens.get("expiry_date",0)/1000-60:
             refresh=await client.post("https://oauth2.googleapis.com/token",data={"client_id":os.getenv("YOUTUBE_CLIENT_ID"),"client_secret":os.getenv("YOUTUBE_CLIENT_SECRET"),"refresh_token":tokens.get("refresh_token"),"grant_type":"refresh_token"})
-            refresh.raise_for_status(); tokens.update(refresh.json())
+            refresh.raise_for_status(); refreshed=refresh.json(); refreshed["expiry_date"]=int((time.time()+refreshed.get("expires_in",3600))*1000); tokens.update(refreshed)
             TOKEN_PATH.write_bytes(Fernet(token_key.encode()).encrypt(json.dumps(tokens).encode()))
         metadata={"snippet":{"title":str(data.get("title","AutoTube AI video"))[:100],"description":str(data.get("description",""))[:5000],"tags":data.get("tags",[])[:500],"categoryId":"28"},"status":{"privacyStatus":payload.privacy_status}}
         if payload.publish_at:
