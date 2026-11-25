@@ -223,6 +223,25 @@ async def youtube_oauth_callback(code: str, state: str):
     return {"connected":True,"message":"YouTube OAuth tokens stored encrypted on this API host. You may close this page."}
 
 
+@router.get("/auth/google/status")
+def youtube_oauth_status():
+    if not TOKEN_PATH.exists():
+        return {"connected": False, "provider": "youtube"}
+    token_key = os.getenv("AUTOTUBE_TOKEN_ENCRYPTION_KEY")
+    if not token_key:
+        return {"connected": False, "provider": "youtube", "reason": "token_encryption_not_configured"}
+    from cryptography.fernet import Fernet, InvalidToken
+    try:
+        tokens = json.loads(Fernet(token_key.encode()).decrypt(TOKEN_PATH.read_bytes()))
+    except (InvalidToken, ValueError):
+        return {"connected": False, "provider": "youtube", "reason": "stored_token_unreadable"}
+    return {
+        "connected": bool(tokens.get("refresh_token") or tokens.get("access_token")),
+        "provider": "youtube",
+        "expires_at": tokens.get("expiry_date"),
+    }
+
+
 @router.get("/analytics/youtube")
 async def youtube_analytics(start_date: str, end_date: str):
     if not TOKEN_PATH.exists():
