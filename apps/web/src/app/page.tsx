@@ -65,7 +65,7 @@ export default function Home() {
   }
 
   const createIdea = () => run(() => request("/api/v1/ideas", { method: "POST", body: JSON.stringify({ topic, language, format, audience: "Beginners" }) }), "Idea saved to your workspace.");
-  const createResearch = () => run(() => request("/api/v1/research", { method: "POST", body: JSON.stringify({ topic, language, format, audience: "Beginners" }) }), "Research brief created.");
+  const createResearch = () => run(() => request("/api/v1/research/brief", { method: "POST", body: JSON.stringify({ topic, language, format, audience: "Beginners" }) }), "AI research brief created.");
   const createScript = () => run(() => request("/api/v1/scripts/generate", { method: "POST", body: JSON.stringify({ topic, language, format, tone }) }), "Script draft created.");
   const createVideo = () => run(() => request("/api/v1/videos", { method: "POST", body: JSON.stringify({ title: topic, description: "", language, format, script: "", tags: [], duration_seconds: format === "short" ? 60 : 600 }) }), "Video draft added to review.");
   const saveSettings = () => run(() => request("/api/v1/settings", { method: "PUT", body: JSON.stringify(settings) }), "Settings saved.");
