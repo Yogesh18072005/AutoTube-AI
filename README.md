@@ -1,70 +1,61 @@
 # AutoTube AI
 
-**An AI-assisted, bilingual YouTube content production workspace for Shorts and long-form videos.**
+**A bilingual AI-assisted YouTube content production workspace for Shorts and long-form videos.**
 
-AutoTube AI brings content ideas, research briefs, script drafting, video records, human review, and production analytics into one dashboard. It is designed for English and Hindi creator workflows, with an explicit human-approval gate before any publishing action.
+AutoTube AI combines a Next.js creator dashboard, a FastAPI production API, a Redis/Celery background worker, and a Java Spring Boot backend retained as an optional migration track. The default Docker setup runs the API and worker that contain the current provider integrations.
 
-## Project highlights
+## What works in the current implementation
 
-- **Bilingual workflow:** English and Hindi content settings for YouTube Shorts and long-form videos.
-- **Creator dashboard:** Next.js and TypeScript interface with research, script studio, approval queue, publishing, analytics, and workspace settings.
-- **Modular backend:** Java 21 and Spring Boot 3.5 REST API, with a Python FastAPI service retained during the backend migration.
-- **Persistence and infrastructure:** PostgreSQL with Spring Data JPA, Redis service configuration, and Docker Compose.
-- **AI-assisted scripts:** Server-side OpenAI-compatible script generation when an API key is configured.
-- **Human-in-the-loop workflow:** Video drafts move through review; scheduling is blocked unless a video has been approved.
+- **Ideas and content records:** persistent workspace records in the API's SQLite database volume.
+- **AI research briefs and scripts:** OpenAI-compatible text generation. AI research briefs explicitly require human source verification; the app does not fabricate citations.
+- **SEO metadata:** provider-generated titles, descriptions, tags and hashtags.
+- **Voice generation:** ElevenLabs MP3 generation when an API key and voice ID are configured.
+- **Media generation:** OpenAI image generation and local 1280×720 thumbnail generation.
+- **Video rendering:** FFmpeg title-card MP4 rendering and a basic scene-card renderer. This is a starter renderer, not a full nonlinear video editor.
+- **Background production:** Redis/Celery worker creates a research brief, script, optional narration, title-card video, thumbnail, SEO metadata and a video draft.
+- **YouTube channel connection:** Google OAuth with encrypted token storage outside the public media directory.
+- **YouTube publishing:** resumable upload and scheduled publication for an approved video that references a generated MP4 asset.
+- **YouTube analytics:** Analytics API endpoint after channel authorization.
+- **Approval boundary:** the API rejects publishing unless the video record has been approved.
 
 ## Technology stack
 
 | Layer | Technologies |
 |---|---|
-| Frontend | Next.js, React, TypeScript |
-| Primary backend | Java 21, Spring Boot 3.5, Spring Web, Spring Data JPA |
-| Supporting API | Python, FastAPI |
-| Database | PostgreSQL |
-| Cache / queue infrastructure | Redis (service configured; end-to-end worker pipeline is pending) |
-| Dev environment | Docker, Docker Compose, Maven, npm |
-| AI integration | OpenAI-compatible Chat Completions API (server-side configuration) |
+| Frontend | Next.js 15, React 19, TypeScript |
+| Production API | Python 3.12, FastAPI, Pydantic |
+| Background jobs | Celery, Redis |
+| Media | FFmpeg, Pillow |
+| Persistence | SQLite in a Docker volume for the current FastAPI runtime |
+| Optional backend migration | Java 21, Spring Boot 3.5, Spring Data JPA, PostgreSQL |
+| AI text and images | OpenAI-compatible Chat Completions API, OpenAI Images API |
+| Voice | ElevenLabs |
+| YouTube | Google OAuth 2.0, YouTube Data API v3, YouTube Analytics API |
+| Tooling | Docker Compose, Maven, npm, GitHub Actions |
 
-## Current implementation status
-
-| Area | Current state |
-|---|---|
-| Dashboard and workspace navigation | Implemented |
-| Ideas and content records | REST endpoints and database persistence implemented |
-| Research briefs | Structured starter briefs; live web research provider is not connected |
-| Script drafting | Template fallback and optional AI-provider generation |
-| Video records and review | Create, approve, and reject workflow implemented |
-| SEO metadata | Starter template generation; live keyword research is not connected |
-| Analytics | Workspace pipeline counts; YouTube channel metrics are not connected |
-| Scheduling and YouTube publishing | Approval check is implemented; OAuth upload and scheduling integration remain pending |
-| Voice generation and video rendering | Provider/FFmpeg integration remains pending |
-| Background automation | Redis infrastructure is configured; complete queue workers are pending |
-| Authentication and production hardening | Not yet production-ready |
-
-**Important:** The application does not claim to upload or publish videos, synthesize voice, or render final videos until those provider integrations are implemented. The publishing endpoint checks approval and then returns a not-implemented response. Do not treat this repository as a production deployment.
-
-## Repository structure
+## Repository layout
 
 ```text
 apps/
-  web/       Next.js + TypeScript creator dashboard
-  backend/   Java Spring Boot REST API
-  api/       Python FastAPI service retained during migration
-docs/        Architecture notes
+  web/       Next.js + TypeScript dashboard
+  api/       FastAPI production API, OAuth, media adapters and Celery worker
+  backend/   Java Spring Boot migration backend
+docs/        Architecture and setup notes
 docker-compose.yml
 .env.example
 ```
 
-## Run locally (Windows PowerShell)
+## Setup (Windows PowerShell)
 
 ### Prerequisites
 
-- Java 21
-- Maven 3.9+
-- Node.js and npm
 - Docker Desktop
+- Node.js 22 or later and npm
+- A modern browser
 
-### 1. Configure environment
+Java 21 and Maven are only required if you also want to run the optional Java migration backend.
+
+### 1. Create your local environment file
 
 From the repository root:
 
@@ -72,53 +63,127 @@ From the repository root:
 Copy-Item .env.example .env
 ```
 
-Add your provider credentials to the local `.env` file only when needed. Never commit `.env` or expose provider keys through `NEXT_PUBLIC_*` variables.
+Generate the two application secrets locally. Put the outputs into `.env`:
 
-### 2. Start PostgreSQL, Redis, and the Java API
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
 
-From the repository root:
+Use the first output for `AUTOTUBE_SECRET_KEY` and the second for `AUTOTUBE_TOKEN_ENCRYPTION_KEY`. Do not commit `.env`.
+
+### 2. Add provider credentials
+
+- **OpenAI:** set `OPENAI_API_KEY`. This enables AI research briefs, scripts, SEO metadata, and image generation. Confirm that the selected model and image endpoint are enabled for your account.
+- **ElevenLabs (optional):** set `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID`.
+- **YouTube:** create a Google OAuth client of type Web application. Enable YouTube Data API v3 and YouTube Analytics API. Add this exact authorized redirect URI: `http://localhost:8000/api/v1/auth/google/callback`. Set `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, and `YOUTUBE_REDIRECT_URI`.
+- **YouTube trend search (optional):** set `YOUTUBE_DATA_API_KEY`.
+
+For Google OAuth, configure the consent screen and add your Google account as a test user while the app is in testing mode. The OAuth client secret and all API keys belong only in the server-side `.env` file.
+
+### 3. Start the API and worker
 
 ```powershell
 docker compose up --build
 ```
 
-The API is available at `http://localhost:8000`; health endpoint: `http://localhost:8000/health`.
+This starts:
+- FastAPI at `http://localhost:8000`
+- Interactive API documentation at `http://localhost:8000/docs`
+- Redis and the Celery worker
+- Persistent Docker volumes for records, generated media and encrypted OAuth tokens
 
-To run the Java API directly instead, start PostgreSQL and Redis first, then:
+Health check: `http://localhost:8000/health`.
+
+### 4. Start the dashboard
+
+Open a second PowerShell window:
 
 ```powershell
-cd apps/backend
-mvn spring-boot:run
-```
-
-### 3. Start the frontend
-
-Open a second terminal:
-
-```powershell
-cd apps/web
-npm install
-$env:NEXT_PUBLIC_API_URL="http://localhost:8000"
+Set-Location apps/web
+npm ci
+$env:NEXT_PUBLIC_API_URL = "http://localhost:8000"
 npm run dev
 ```
 
 Open `http://localhost:3000`.
 
-### 4. Run Java backend tests
+### 5. Connect YouTube
+
+Open **Channels** in the dashboard and select **Connect YouTube with Google**. Complete Google's consent flow. The API stores the returned tokens encrypted in the private application data volume. Do not delete that volume if you want to keep the channel connection.
+
+### 6. Run the production pipeline
+
+Open **Automation**, enter a topic and start the pipeline. The worker uses the configured OpenAI provider and creates a research brief, script, title-card MP4, thumbnail, SEO draft and video review record. If ElevenLabs credentials are present, it also creates narration audio.
+
+The generated MP4 is a branded title-card starter render. Review and replace/add scene visuals as needed; this project is not a full automatic stock-footage editor. Research output is an AI brief and must be fact-checked; it is not live sourced research.
+
+### 7. Approve and schedule
+
+Open **Approval Queue** and review the generated record. Only approve a video after checking the script, media, metadata, rights and factual claims. Then use **Publishing** to schedule it. The backend checks approval and uploads the referenced MP4 through YouTube's resumable upload API. Scheduled videos are uploaded as private with YouTube's `publishAt` value.
+
+**Publishing is a real external action.** Test with private or unlisted content first. The project intentionally does not auto-publish unreviewed drafts.
+
+## API highlights
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/health` | Health check |
+| POST | `/api/v1/scripts/generate` | AI script generation |
+| POST | `/api/v1/voice/generate` | ElevenLabs narration |
+| POST | `/api/v1/media/image` | OpenAI image generation |
+| POST | `/api/v1/render/title-card` | FFmpeg title-card MP4 |
+| POST | `/api/v1/videos/render-project` | Basic scene-card render |
+| POST | `/api/v1/thumbnails/generate` | 1280×720 thumbnail |
+| GET | `/api/v1/auth/google/start` | Begin YouTube OAuth |
+| GET | `/api/v1/auth/google/status` | Safe connection status |
+| POST | `/api/v1/automation/queue` | Queue a production job |
+| GET | `/api/v1/automation/jobs/{job_id}` | Read job status/result |
+| POST | `/api/v1/publishing/{video_id}/schedule` | Approval-gated YouTube upload/schedule |
+| GET | `/api/v1/analytics/youtube` | YouTube Analytics report |
+| GET | `/api/v1/research/trends` | Recent YouTube trend candidates |
+
+## Optional Java migration backend
+
+The Java service is not the default dashboard API yet. It can be started alongside the production API with:
 
 ```powershell
-cd apps/backend
-mvn test
+docker compose --profile java-migration up --build
 ```
 
-## AI script generation
+It listens on `http://localhost:8001` and uses PostgreSQL. The FastAPI service remains the integrated runtime until the Java backend reaches feature parity. Do not point the dashboard at the Java service if you need the OAuth, media and worker features listed above.
 
-Set `OPENAI_API_KEY` in the root `.env` file to enable the Java backend's AI script-generation integration. Optional model and base URL settings are documented in `.env.example`. Without credentials, provider-backed generation reports that configuration is required; the app does not silently claim a live AI response.
+## Tests and CI
 
-## Safety and publishing workflow
+GitHub Actions checks:
+- Python API tests
+- Java backend tests
+- Frontend ESLint, TypeScript and production build
 
-Generated content remains a draft until a person reviews and approves it. The API rejects scheduling requests for unapproved videos. Live YouTube OAuth upload is not yet implemented, so no real video is published by this project at its current stage.
+Run tests locally:
 
-## Development note
+```powershell
+Set-Location apps/api
+python -m pip install -e ".[dev]"
+pytest -q
 
-The Java Spring Boot service is the primary backend target. The Python FastAPI code remains in the repository as migration/reference code until endpoint parity and the migration are complete.
+Set-Location ../backend
+mvn test
+
+Set-Location ../web
+npm ci
+npm run lint
+npm run typecheck
+npm run build
+```
+
+## Security and operational notes
+
+- Provider secrets stay server-side; never put them in `NEXT_PUBLIC_*` variables or commit `.env`.
+- OAuth tokens are encrypted with Fernet and stored in the private `/app/data` volume, not in the publicly served media directory.
+- Back up the Docker volumes and retain the same `AUTOTUBE_TOKEN_ENCRYPTION_KEY`; losing it makes stored OAuth tokens unreadable.
+- Set strong unique application secrets before connecting accounts.
+- Configure Google OAuth authorized domains/redirect URIs for any deployed host; the localhost callback is for local development only.
+- Use HTTPS, authentication, per-user authorization, rate limits, monitoring, managed storage and a production database before exposing this as a public multi-user service.
+- Provider usage may incur charges. Check each provider's pricing and quotas.
+
