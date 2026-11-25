@@ -2,7 +2,6 @@ package ai.autotube.api;
 
 import ai.autotube.ai.AiScriptService;
 import ai.autotube.records.RecordService;
-import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -37,6 +36,35 @@ public class ApiController {
     public List<Map<String,Object>> list(@RequestParam(required = false) String kind) {
         return records.list(kind);
     }
+
+    @GetMapping("/api/v1/settings")
+    public Map<String,Object> settings() {
+        List<Map<String,Object>> saved = records.list("settings");
+        if (saved.isEmpty()) return defaultSettings();
+        return new LinkedHashMap<>((Map<String,Object>) saved.get(0).get("data"));
+    }
+
+    @PutMapping("/api/v1/settings")
+    public Map<String,Object> updateSettings(@RequestBody Map<String,Object> body) {
+        Map<String,Object> merged = defaultSettings();
+        merged.putAll(body);
+        List<Map<String,Object>> saved = records.list("settings");
+        if (saved.isEmpty()) {
+            return (Map<String,Object>) records.create("settings", "workspace_settings", merged).get("data");
+        }
+        return (Map<String,Object>) records.change(String.valueOf(saved.get(0).get("id")), "workspace_settings", merged).get("data");
+    }
+
+    private Map<String,Object> defaultSettings() {
+        Map<String,Object> defaults = new LinkedHashMap<>();
+        defaults.put("channel_name", "");
+        defaults.put("default_language", "en");
+        defaults.put("default_format", "short");
+        defaults.put("ai_provider", "none");
+        defaults.put("tts_provider", "none");
+        return defaults;
+    }
+
 
     @PostMapping("/api/v1/ideas")
     @ResponseStatus(HttpStatus.CREATED)
