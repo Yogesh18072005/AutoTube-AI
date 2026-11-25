@@ -177,7 +177,7 @@ npm run build
 
 - Provider secrets stay server-side; never put them in `NEXT_PUBLIC_*` variables or commit `.env`.
 - OAuth tokens are encrypted with Fernet and stored in the private `/app/data` volume, not in the publicly served media directory.
-- Back up the Docker volumes and retain the same `AUTOTUBE_TOKEN_ENCRYPTION_KEY`; losing it makes stored OAuth tokens unreadable.
+- Back up the `autotube_data` Docker volume together with the generated media volume. It contains the persistent encryption key and encrypted OAuth token; losing the data volume makes the stored YouTube connection unreadable unless you supplied and retained your own `AUTOTUBE_TOKEN_ENCRYPTION_KEY`.
 - Set strong unique application secrets before connecting accounts.
 - Configure Google OAuth authorized domains/redirect URIs for any deployed host; the localhost callback is for local development only.
 - Use HTTPS, authentication, per-user authorization, rate limits, monitoring, managed storage and a production database before exposing this as a public multi-user service.
