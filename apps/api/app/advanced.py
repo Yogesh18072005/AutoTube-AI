@@ -168,6 +168,21 @@ async def create_ai_research_brief(payload: ResearchBriefInput):
     )
 
 
+@router.get("/providers/status")
+def providers_status():
+    """Expose provider readiness booleans only; never return credential values."""
+    channel = youtube_oauth_status()
+    return {
+        "openai_text": bool(os.getenv("OPENAI_API_KEY")),
+        "openai_images": bool(os.getenv("OPENAI_API_KEY")),
+        "elevenlabs_voice": bool(os.getenv("ELEVENLABS_API_KEY") and os.getenv("ELEVENLABS_VOICE_ID")),
+        "youtube_oauth_credentials": bool(os.getenv("YOUTUBE_CLIENT_ID") and os.getenv("YOUTUBE_CLIENT_SECRET")),
+        "youtube_trend_api_key": bool(os.getenv("YOUTUBE_DATA_API_KEY") or os.getenv("GOOGLE_API_KEY")),
+        "youtube_channel_connected": bool(channel.get("connected")),
+        "application_security_keys": "managed_automatically",
+    }
+
+
 @router.get("/research/trends")
 async def youtube_trends(q: str = "artificial intelligence", region: str = "IN", language: str = "en"):
     key = os.getenv("YOUTUBE_DATA_API_KEY") or os.getenv("GOOGLE_API_KEY")
