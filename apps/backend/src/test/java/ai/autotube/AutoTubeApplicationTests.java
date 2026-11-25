@@ -22,6 +22,29 @@ class AutoTubeApplicationTests {
     }
 
     @Test
+    void workspaceSettingsCanBeSavedAndLoaded() throws Exception {
+        mvc.perform(put("/api/v1/settings")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"channel_name\":\"Test Channel\",\"default_language\":\"hi\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.channel_name").value("Test Channel"))
+                .andExpect(jsonPath("$.default_language").value("hi"));
+
+        mvc.perform(get("/api/v1/settings"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.channel_name").value("Test Channel"));
+    }
+
+    @Test
+    void ideaCanBeCreatedAndListed() throws Exception {
+        mvc.perform(post("/api/v1/ideas")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"topic\":\"A test idea about Java APIs\",\"language\":\"en\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.kind").value("idea"));
+    }
+
+    @Test
     void publishingIsBlockedUntilVideoIsApproved() throws Exception {
         String response = mvc.perform(post("/api/v1/videos")
                         .contentType(MediaType.APPLICATION_JSON)
