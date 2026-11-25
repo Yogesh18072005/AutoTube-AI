@@ -26,11 +26,43 @@ DATA_ROOT.mkdir(parents=True, exist_ok=True)
 TOKEN_PATH = DATA_ROOT / ".youtube-token.enc"
 
 
-def _secret() -> str:
-    value = os.getenv("AUTOTUBE_SECRET_KEY")
-    if not value:
-        raise ProviderNotConfigured("Set AUTOTUBE_SECRET_KEY on the API server.")
+def _persistent_secret(env_name: str, file_name: str, create_value) -> str:
+    """Load an explicit secret or create a stable private key in the persistent data volume."""
+    configured = os.getenv(env_name)
+    if configured:
+        return configured
+    path = DATA_ROOT / file_name
+    if path.is_file():
+        return path.read_text(encoding="utf-8").strip()
+    value = create_value()
+    try:
+        with path.open("x", encoding="utf-8") as secret_file:
+            secret_file.write(value)
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
+    except FileExistsError:
+        return path.read_text(encoding="utf-8").strip()
     return value
+
+
+def _secret() -> str:
+    return _persistent_secret(
+        "AUTOTUBE_SECRET_KEY",
+        ".oauth-state-secret",
+        lambda: secrets.token_urlsafe(48),
+    )
+
+
+def _token_encryption_key() -> str:
+    from cryptography.fernet import Fernet
+
+    return _persistent_secret(
+        "AUTOTUBE_TOKEN_ENCRYPTION_KEY",
+        ".youtube-token-encryption-key",
+        lambda: Fernet.generate_key().decode("ascii"),
+    )
 
 
 def _sign(value: str) -> str:
@@ -242,7 +274,7 @@ async def youtube_oauth_callback(code: str, state: str):
         response.raise_for_status()
         tokens=response.json()
         tokens["expiry_date"] = int((time.time() + tokens.get("expires_in", 3600)) * 1000)
-    token_key=os.getenv("AUTOTUBE_TOKEN_ENCRYPTION_KEY")
+    token_key=_token_encryption_key()
     if not token_key:
         raise HTTPException(503,"OAuth completed but token storage is disabled. Configure AUTOTUBE_TOKEN_ENCRYPTION_KEY and retry authorization.")
     from cryptography.fernet import Fernet
@@ -258,7 +290,7 @@ async def youtube_oauth_callback(code: str, state: str):
 def youtube_oauth_status():
     if not TOKEN_PATH.exists():
         return {"connected": False, "provider": "youtube"}
-    token_key = os.getenv("AUTOTUBE_TOKEN_ENCRYPTION_KEY")
+    token_key = _token_encryption_key()
     if not token_key:
         return {"connected": False, "provider": "youtube", "reason": "token_encryption_not_configured"}
     from cryptography.fernet import Fernet, InvalidToken
