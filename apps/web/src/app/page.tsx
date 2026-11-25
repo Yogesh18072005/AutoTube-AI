@@ -44,7 +44,7 @@ export default function Home() {
       setItems(all); setMetrics(stats); setSettings(config);
       setMessage("");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "API unavailable. Start the FastAPI server.");
+      setMessage(error instanceof Error ? error.message : "API unavailable. Start the Java Spring Boot API.");
     }
   }, []);
 
