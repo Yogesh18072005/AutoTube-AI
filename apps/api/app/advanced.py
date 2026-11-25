@@ -317,8 +317,6 @@ async def youtube_oauth_callback(code: str, state: str):
         tokens=response.json()
         tokens["expiry_date"] = int((time.time() + tokens.get("expires_in", 3600)) * 1000)
     token_key=_token_encryption_key()
-    if not token_key:
-        raise HTTPException(503,"OAuth completed but token storage is disabled. Configure AUTOTUBE_TOKEN_ENCRYPTION_KEY and retry authorization.")
     from cryptography.fernet import Fernet
     try:
         encryption_key=Fernet(token_key.encode())
@@ -351,8 +349,7 @@ def youtube_oauth_status():
 async def youtube_analytics(start_date: str, end_date: str):
     if not TOKEN_PATH.exists():
         raise HTTPException(401,"Connect a YouTube channel using /api/v1/auth/google/start.")
-    token_key=os.getenv("AUTOTUBE_TOKEN_ENCRYPTION_KEY")
-    if not token_key: raise HTTPException(503,"Token encryption key is not configured.")
+    token_key=_token_encryption_key()
     from cryptography.fernet import Fernet, InvalidToken
     try:
         fernet=Fernet(token_key.encode())
@@ -417,8 +414,7 @@ async def upload_approved_video(payload: YouTubeUploadInput):
         raise HTTPException(404,"Rendered video asset was not found on this API host.")
     if not TOKEN_PATH.exists():
         raise HTTPException(401,"Connect a YouTube channel before uploading.")
-    token_key=os.getenv("AUTOTUBE_TOKEN_ENCRYPTION_KEY")
-    if not token_key: raise HTTPException(503,"Token encryption key is not configured.")
+    token_key=_token_encryption_key()
     from cryptography.fernet import Fernet
     try: tokens=json.loads(Fernet(token_key.encode()).decrypt(TOKEN_PATH.read_bytes()))
     except Exception as exc: raise HTTPException(500,"Stored YouTube credentials could not be decrypted.") from exc
