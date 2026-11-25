@@ -17,30 +17,22 @@ services:
     ports: ["6379:6379"]
     volumes: ["redis_data:/data"]
   api:
-    build: ./apps/api
-    env_file: .env
+    build: ./apps/backend
     environment:
-      DATABASE_URL: postgresql+psycopg://autotube:autotube_dev@postgres:5432/autotube
-      REDIS_URL: redis://redis:6379/0
-      AUTOTUBE_MEDIA_DIR: /app/media
+      API_PORT: 8000
+      DATABASE_URL: jdbc:postgresql://postgres:5432/autotube
+      DATABASE_USERNAME: autotube
+      DATABASE_PASSWORD: autotube_dev
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CORS_ORIGINS: http://localhost:3000
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
     ports: ["8000:8000"]
-    volumes: ["autotube_media:/app/media"]
-    depends_on:
-      postgres: {condition: service_healthy}
-      redis: {condition: service_started}
-  worker:
-    build: ./apps/api
-    command: ["celery","-A","app.worker:celery_app","worker","--loglevel=INFO"]
-    env_file: .env
-    environment:
-      DATABASE_URL: postgresql+psycopg://autotube:autotube_dev@postgres:5432/autotube
-      REDIS_URL: redis://redis:6379/0
-      AUTOTUBE_MEDIA_DIR: /app/media
-    volumes: ["autotube_media:/app/media"]
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_started}
 volumes:
   postgres_data:
   redis_data:
-  autotube_media:
