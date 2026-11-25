@@ -41,6 +41,13 @@ def _b64(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode().rstrip("=")
 
 
+def _escape_drawtext(value: str) -> str:
+    escaped = value.replace("\\\\", "\\\\\\\\")
+    for character in [":", "'", ",", ";", "[", "]", "%"]:
+        escaped = escaped.replace(character, "\\\\" + character)
+    return escaped
+
+
 def _jwt(payload: dict) -> str:
     header = _b64(b'{"alg":"HS256","typ":"JWT"}')
     body = _b64(json.dumps(payload, separators=(",", ":")).encode())
@@ -213,7 +220,7 @@ def youtube_oauth_start():
     if not client_id or not os.getenv("YOUTUBE_CLIENT_SECRET"):
         raise HTTPException(503,"Configure YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET.")
     try:
-        state=secrets.token_urlsafe(32)
+        state=f"{int(time.time())}.{secrets.token_urlsafe(24)}"
         signed=f"{state}.{_sign(state)}"
     except ProviderNotConfigured as exc:
         raise HTTPException(503, str(exc)) from exc
@@ -225,7 +232,9 @@ def youtube_oauth_start():
 async def youtube_oauth_callback(code: str, state: str):
     try:
         raw,signature=state.rsplit(".",1)
-        if not hmac.compare_digest(signature,_sign(raw)): raise ValueError("bad state")
+        timestamp,nonce=raw.split(".",1)
+        if not hmac.compare_digest(signature,_sign(raw)): raise ValueError("bad signature")
+        if abs(time.time()-int(timestamp)) > 600 or not nonce: raise ValueError("expired state")
     except Exception as exc:
         raise HTTPException(400,"Invalid OAuth state.") from exc
     async with httpx.AsyncClient(timeout=30) as client:
