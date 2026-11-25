@@ -11,7 +11,7 @@ const nav = [
   ["automation", "Automation", "⟳"], ["settings", "Settings", "⚙"],
 ] as const;
 
-type Item = { id: string; kind: string; status: string; data: Record<string, any>; created_at: string };
+type Item = { id: string; kind: string; status: string; data: Record<string, unknown>; created_at: string };
 type Metrics = { ideas: number; scripts: number; videos: number; awaiting_review: number; approved: number; scheduled: number; published: number; views: number; watch_time_hours: number; note?: string };
 const emptyMetrics: Metrics = { ideas: 0, scripts: 0, videos: 0, awaiting_review: 0, approved: 0, scheduled: 0, published: 0, views: 0, watch_time_hours: 0 };
 
@@ -32,8 +32,6 @@ export default function Home() {
   const [language, setLanguage] = useState("en");
   const [format, setFormat] = useState("short");
   const [tone, setTone] = useState("clear and engaging");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
   const [settings, setSettings] = useState({ channel_name: "", default_language: "en", default_format: "short", ai_provider: "none", tts_provider: "none" });
 
   const refresh = useCallback(async () => {
@@ -69,7 +67,7 @@ export default function Home() {
   const createIdea = () => run(() => request("/api/v1/ideas", { method: "POST", body: JSON.stringify({ topic, language, format, audience: "Beginners" }) }), "Idea saved to your workspace.");
   const createResearch = () => run(() => request("/api/v1/research", { method: "POST", body: JSON.stringify({ topic, language, format, audience: "Beginners" }) }), "Research brief created.");
   const createScript = () => run(() => request("/api/v1/scripts/generate", { method: "POST", body: JSON.stringify({ topic, language, format, tone }) }), "Script draft created.");
-  const createVideo = () => run(() => request("/api/v1/videos", { method: "POST", body: JSON.stringify({ title: title || topic, description, language, format, script: "", tags: [], duration_seconds: format === "short" ? 60 : 600 }) }), "Video draft added to review.");
+  const createVideo = () => run(() => request("/api/v1/videos", { method: "POST", body: JSON.stringify({ title: topic, description: "", language, format, script: "", tags: [], duration_seconds: format === "short" ? 60 : 600 }) }), "Video draft added to review.");
   const saveSettings = () => run(() => request("/api/v1/settings", { method: "PUT", body: JSON.stringify(settings) }), "Settings saved.");
 
   function heading() {
@@ -97,7 +95,7 @@ export default function Home() {
 
         {active === "research" && <><div className="intro"><span className="eyebrow">DISCOVER YOUR NEXT VIDEO</span><h2>AI Research & Ideas</h2><p>Save topic ideas and create structured research briefs. Live trend/source discovery becomes available when a research provider is connected.</p></div><div className="form-card"><label>Topic or question<input value={topic} onChange={e=>setTopic(e.target.value)} placeholder="e.g. How AI agents are changing software development"/></label><div className="form-row"><label>Language<select value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">English</option><option value="hi">Hindi</option></select></label><label>Format<select value={format} onChange={e=>setFormat(e.target.value)}><option value="short">YouTube Shorts</option><option value="long">Long-form video</option></select></label></div><div className="form-row"><button disabled={!topic.trim()||loading} className="primary-button" onClick={()=>void createResearch()}>Create research brief ✦</button><button disabled={!topic.trim()||loading} className="text-button" onClick={()=>void createIdea()}>Save as idea</button></div></div><RecordList items={visible}/></>}
 
-        {active === "scripts" && <><div className="intro"><span className="eyebrow">BILINGUAL WRITING ROOM</span><h2>Script Studio</h2><p>Draft a structured script with a hook and scene plan. Connect an AI provider for original, researched scripts.</p></div><div className="form-card"><label>Video topic<input value={topic} onChange={e=>setTopic(e.target.value)} placeholder="What should the video explain?"/></label><div className="form-row"><label>Language<select value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">English</option><option value="hi">Hindi</option></select></label><label>Format<select value={format} onChange={e=>setFormat(e.target.value)}><option value="short">Short (under 60 sec)</option><option value="long">Long-form</option></select></label></div><label>Tone<input value={tone} onChange={e=>setTone(e.target.value)} /></label><button disabled={!topic.trim()||loading} className="primary-button" onClick={()=>void createScript()}>Generate script draft ✦</button></div><RecordList items={visible}/></>}
+        {active === "scripts" && <><div className="intro"><span className="eyebrow">BILINGUAL WRITING ROOM</span><h2>Script Studio</h2><p>Draft a structured script with a hook and scene plan. Connect an AI provider for original, researched scripts.</p></div><div className="form-card"><label>Video topic<input value={topic} onChange={e=>setTopic(e.target.value)} placeholder="What should the video explain?"/></label><div className="form-row"><label>Language<select value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">English</option><option value="hi">Hindi</option></select></label><label>Format<select value={format} onChange={e=>setFormat(e.target.value)}><option value="short">Short (under 60 sec)</option><option value="long">Long-form</option></select></label></div><label>Tone<input value={tone} onChange={e=>setTone(e.target.value)} /></label><div className="form-row"><button disabled={!topic.trim()||loading} className="primary-button" onClick={()=>void createScript()}>Generate script draft ✦</button><button disabled={!topic.trim()||loading} className="text-button" onClick={()=>void createVideo()}>Create video draft</button></div></div><RecordList items={visible}/></>}
 
         {active === "approval" && <><div className="intro"><span className="eyebrow">YOUR FINAL CHECK</span><h2>Approval Queue</h2><p>Only videos explicitly approved here can enter the publishing workflow.</p></div><RecordList items={visible} onApprove={id=>run(()=>request("/api/v1/videos/"+id+"/approve",{method:"POST",body:JSON.stringify({note:"Approved in creator workspace"})}),"Video approved.")} onReject={id=>run(()=>request("/api/v1/videos/"+id+"/reject",{method:"POST",body:JSON.stringify({note:"Changes requested"})}),"Changes requested.")}/></>}
 
@@ -115,7 +113,7 @@ export default function Home() {
 
 function RecordList({items,onApprove,onReject,onSchedule}:{items:Item[];onApprove?:(id:string)=>void;onReject?:(id:string)=>void;onSchedule?:(id:string)=>void}) {
   if (!items.length) return <div className="empty-state"><span>◌</span><b>Nothing here yet</b><p>New items you create will appear in this workspace.</p></div>;
-  return <div className="record-list">{items.map(item=><article className="record-card" key={item.id}><div className="record-main"><span className="record-kind">{item.kind.toUpperCase()} · {item.data.language||"EN"} · {item.data.format||"—"}</span><h3>{item.data.topic||item.data.title||"Untitled item"}</h3><p>{item.data.full_text||item.data.provider_message||item.data.description||item.data.angle||"Workspace item"}</p><span className={"status status-"+item.status}>{item.status.replaceAll("_"," ")}</span></div><div className="record-actions">{onApprove&&<button className="small-primary" onClick={()=>onApprove(item.id)}>Approve</button>}{onReject&&<button className="small-quiet" onClick={()=>onReject(item.id)}>Request changes</button>}{onSchedule&&item.status==="approved"&&<button className="small-primary" onClick={()=>onSchedule(item.id)}>Schedule</button>}</div></article>)}</div>;
+  return <div className="record-list">{items.map(item=><article className="record-card" key={item.id}><div className="record-main"><span className="record-kind">{item.kind.toUpperCase()} · {String(item.data.language ?? "EN")} · {String(item.data.format ?? "—")}</span><h3>{String(item.data.topic ?? item.data.title ?? "Untitled item")}</h3><p>{String(item.data.full_text ?? item.data.provider_message ?? item.data.description ?? item.data.angle ?? "Workspace item")}</p><span className={"status status-"+item.status}>{item.status.replaceAll("_"," ")}</span></div><div className="record-actions">{onApprove&&<button className="small-primary" onClick={()=>onApprove(item.id)}>Approve</button>}{onReject&&<button className="small-quiet" onClick={()=>onReject(item.id)}>Request changes</button>}{onSchedule&&item.status==="approved"&&<button className="small-primary" onClick={()=>onSchedule(item.id)}>Schedule</button>}</div></article>)}</div>;
 }
 
 function ModulePanel({active,onCreateVideo}:{active:string;onCreateVideo:()=>void}) {
@@ -124,7 +122,7 @@ function ModulePanel({active,onCreateVideo}:{active:string;onCreateVideo:()=>voi
   const [seoTopic,setSeoTopic] = useState("");
   const [notice,setNotice] = useState("");
   const [busy,setBusy] = useState(false);
-  const [result,setResult] = useState<Record<string,any>|null>(null);
+  const [result,setResult] = useState<unknown>(null);
 
   const content:Record<string,{tag:string;title:string;desc:string;steps:string[];note:string}> = {
     channels:{tag:"CHANNEL MANAGEMENT",title:"Connect your YouTube channel",desc:"Channel identity, OAuth permissions and upload defaults live here.",steps:["Create a Google Cloud project","Enable YouTube Data API v3 and YouTube Analytics API","Configure OAuth consent and redirect URI","Store client credentials in the API environment"],note:"OAuth callback, encrypted token storage and channel authorization still need to be completed."},
@@ -137,7 +135,7 @@ function ModulePanel({active,onCreateVideo}:{active:string;onCreateVideo:()=>voi
   };
   const item=content[active];
 
-  async function run(path:string,payload:Record<string,any>,success:string) {
+  async function run(path:string,payload:Record<string,unknown>,success:string) {
     setBusy(true); setNotice(""); setResult(null);
     try {
       const data=await request(path,{method:"POST",body:JSON.stringify(payload)});
