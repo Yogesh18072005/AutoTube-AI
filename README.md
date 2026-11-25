@@ -67,12 +67,16 @@ The API automatically creates strong, persistent OAuth-signing and token-encrypt
 
 ### 2. Add provider credentials
 
-- **OpenAI:** set `OPENAI_API_KEY`. This enables AI research briefs, scripts, SEO metadata, and image generation. Confirm that the selected model and image endpoint are enabled for your account.
-- **ElevenLabs (optional):** set `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID`.
-- **YouTube:** create a Google OAuth client of type Web application. Enable YouTube Data API v3 and YouTube Analytics API. Add this exact authorized redirect URI: `http://localhost:8000/api/v1/auth/google/callback`. Set `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, and `YOUTUBE_REDIRECT_URI`.
-- **YouTube trend search (optional):** set `YOUTUBE_DATA_API_KEY`.
+| Credential | Enables | Required? |
+|---|---|---|
+| `OPENAI_API_KEY` | AI research briefs, scripts, SEO metadata, image generation and the automated content pipeline | Required for AI production |
+| `YOUTUBE_CLIENT_ID` + `YOUTUBE_CLIENT_SECRET` | Google sign-in consent, YouTube upload/scheduling and channel analytics | Required for YouTube account features |
+| `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` | Generated narration audio | Optional |
+| `YOUTUBE_DATA_API_KEY` | Recent YouTube trend discovery | Optional |
 
-For Google OAuth, configure the consent screen and add your Google account as a test user while the app is in testing mode. The OAuth client secret and all API keys belong only in the server-side `.env` file.
+For YouTube, create a Google OAuth client of type **Web application**. Enable YouTube Data API v3 and YouTube Analytics API. Add this exact authorized redirect URI: `http://localhost:8000/api/v1/auth/google/callback`, then set `YOUTUBE_REDIRECT_URI` to the same value. Configure the OAuth consent screen and add your Google account as a test user while the app is in testing mode.
+
+The application automatically creates and persists its own OAuth signing and token-encryption keys. After credentials are configured, connect your channel from **Channels** in the dashboard and approve Google's requested permissions. All provider credentials belong only in the server-side `.env` file; never paste them into the dashboard or commit them.
 
 ### 3. Start the API and worker
 
