@@ -126,6 +126,48 @@ def _font(size: int):
         return None
 
 
+class ResearchBriefInput(BaseModel):
+    topic: str = Field(min_length=3, max_length=240)
+    language: str = "en"
+    format: str = "short"
+    audience: str = "Beginners"
+
+
+@router.post("/research/brief")
+async def create_ai_research_brief(payload: ResearchBriefInput):
+    from app.production import generate_text
+    from app.main import save
+
+    language_name = "Hindi" if payload.language == "hi" else "English"
+    prompt = (
+        f"Prepare a creator research brief about {payload.topic} for {payload.audience} "
+        f"in {language_name}. Format: {payload.format}. Separate established background "
+        "knowledge from claims that need source verification. Do not invent citations, "
+        "URLs, statistics, or current trends. Return concise sections: overview, key points, "
+        "audience questions, possible angles, and a verification checklist."
+    )
+    try:
+        brief = await generate_text(
+            prompt,
+            system="You are a careful research assistant. Never fabricate sources or current facts.",
+        )
+    except ProviderNotConfigured as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, "AI research provider request failed. Check provider configuration and API quota.") from exc
+    return save(
+        "research",
+        {
+            **payload.model_dump(),
+            "brief": brief,
+            "research_status": "ai_brief_needs_source_verification",
+            "source_notes": [],
+            "provider": "openai-compatible",
+        },
+        "researched",
+    )
+
+
 @router.get("/research/trends")
 async def youtube_trends(q: str = "artificial intelligence", region: str = "IN", language: str = "en"):
     key = os.getenv("YOUTUBE_DATA_API_KEY") or os.getenv("GOOGLE_API_KEY")
