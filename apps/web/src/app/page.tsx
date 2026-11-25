@@ -123,17 +123,41 @@ function ModulePanel({active,onCreateVideo}:{active:string;onCreateVideo:()=>voi
   const [notice,setNotice] = useState("");
   const [busy,setBusy] = useState(false);
   const [result,setResult] = useState<unknown>(null);
+  const [pipelineTopic,setPipelineTopic] = useState("");
+  const [connection,setConnection] = useState<{connected:boolean;reason?:string}|null>(null);
 
   const content:Record<string,{tag:string;title:string;desc:string;steps:string[];note:string}> = {
-    channels:{tag:"CHANNEL MANAGEMENT",title:"Connect your YouTube channel",desc:"Channel identity, OAuth permissions and upload defaults live here.",steps:["Create a Google Cloud project","Enable YouTube Data API v3 and YouTube Analytics API","Configure OAuth consent and redirect URI","Store client credentials in the API environment"],note:"OAuth callback, encrypted token storage and channel authorization still need to be completed."},
+    channels:{tag:"CHANNEL MANAGEMENT",title:"Connect your YouTube channel",desc:"Channel identity, OAuth permissions and upload defaults live here.",steps:["Create a Google Cloud project","Enable YouTube Data API v3 and YouTube Analytics API","Configure OAuth consent and redirect URI","Store client credentials in the API environment"],note:"Connect the Google account that owns the YouTube channel. Tokens are encrypted on the API host."},
     voice:{tag:"NARRATION WORKSPACE",title:"Voice Studio",desc:"Generate Hindi or English narration from your approved script text.",steps:["Choose a voice ID in the server environment","Generate narration audio","Review the MP3 asset in the media library"],note:"Voice generation is not migrated to the Java backend yet. The API will clearly report that audio generation is unavailable rather than creating a fake asset."},
     media:{tag:"ASSET LIBRARY",title:"Media Library",desc:"Generated audio and rendered video files are served from the local media directory.",steps:["Track asset source and license","Attach assets to scenes","Move production assets to durable object storage before deployment"],note:"Image/video generation and cloud object storage are not connected in this release."},
     editor:{tag:"VIDEO PRODUCTION",title:"Video Editor & Renderer",desc:"Render a basic 1080p title-card MP4 with optional generated narration.",steps:["Install FFmpeg and add it to PATH","Render a title card","Review the MP4 before using it in a final edit"],note:"FFmpeg rendering is not migrated to the Java backend yet. No MP4 is created by this module in the current Java release."},
     thumbnails:{tag:"CLICK-THROUGH STUDIO",title:"Thumbnail Studio",desc:"Prepare thumbnail concepts and production metadata.",steps:["Generate thumbnail concepts","Apply channel brand kit","Check mobile readability","Export 1280 × 720 image"],note:"Image generation and thumbnail export still need an image provider and storage integration."},
     seo:{tag:"DISCOVERY OPTIMIZATION",title:"SEO Studio",desc:"Generate YouTube title options, descriptions, tags and hashtags.",steps:["Enter the video topic","Generate metadata with the configured AI provider","Review every claim and edit before approval"],note:"The Java API currently creates starter metadata from the topic. AI keyword research, live search-volume data and provider-based optimization are still pending."},
-    automation:{tag:"WORKFLOW ORCHESTRATION",title:"AUTOMATION CONTROL",desc:"The pipeline includes explicit checkpoints and a human approval boundary.",steps:["Research topic","Generate script and narration","Create visuals and render video","Generate thumbnail and SEO metadata","Human approval","Schedule and reconcile publication"],note:"Redis/Celery workers, retries, persistent job orchestration and live YouTube publishing are not yet connected."},
+    automation:{tag:"WORKFLOW ORCHESTRATION",title:"AUTOMATION CONTROL",desc:"The pipeline includes explicit checkpoints and a human approval boundary.",steps:["Research topic","Generate script and narration","Create visuals and render video","Generate thumbnail and SEO metadata","Human approval","Schedule and reconcile publication"],note:"The Redis/Celery worker creates a script, voice when configured, a title-card MP4, a thumbnail, SEO metadata and a video draft. A person must review and approve it before publishing."},
   };
   const item=content[active];
+
+  useEffect(() => {
+    if (active !== "channels") return;
+    fetch(API + "/api/v1/auth/google/status")
+      .then(response => response.json())
+      .then(data => setConnection(data))
+      .catch(() => setConnection({ connected: false, reason: "api_unavailable" }));
+  }, [active]);
+
+  async function connectYouTube() {
+    setBusy(true); setNotice("");
+    try {
+      const response = await fetch(API + "/api/v1/auth/google/start");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Could not start YouTube authorization.");
+      if (!data.authorization_url) throw new Error("The API did not return an authorization URL.");
+      window.location.assign(data.authorization_url);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "YouTube connection failed.");
+      setBusy(false);
+    }
+  }
 
   async function run(path:string,payload:Record<string,unknown>,success:string) {
     setBusy(true); setNotice(""); setResult(null);
@@ -148,10 +172,13 @@ function ModulePanel({active,onCreateVideo}:{active:string;onCreateVideo:()=>voi
   return <><div className="intro"><span className="eyebrow">{item.tag}</span><h2>{item.title}</h2><p>{item.desc}</p></div><div className="workflow-card">
     <h3>Workflow</h3><ol>{item.steps.map(step=><li key={step}>{step}</li>)}</ol>
     <div className="notice warning">{item.note}</div>
+    {active==="channels"&&<><div className="status-card">{connection?.connected?"YouTube channel connected.":connection?.reason==="stored_token_unreadable"?"Stored YouTube token cannot be decrypted. Check the token encryption key.":"YouTube channel is not connected."}</div><button className="primary-button" disabled={busy} onClick={()=>void connectYouTube()}>{busy?"Opening Google…":"Connect YouTube with Google"}</button></>}
+    {active==="automation"&&<><label className="tool-label">Video topic<input value={pipelineTopic} onChange={e=>setPipelineTopic(e.target.value)} placeholder="What should AutoTube produce?"/></label><button className="primary-button" disabled={busy||!pipelineTopic.trim()} onClick={()=>void run("/api/v1/automation/queue",{topic:pipelineTopic,language:"en",format:"short"},"Automation job queued. Check the job result and approval queue.")}>{busy?"Queueing…":"Run content production pipeline"}</button></>}
     {active==="voice"&&<><label className="tool-label">Narration text<textarea value={voiceText} onChange={e=>setVoiceText(e.target.value)} placeholder="Paste your approved narration here..." rows={5}/></label><button className="primary-button" disabled={busy||!voiceText.trim()} onClick={()=>void run("/api/v1/voice/generate",{text:voiceText},"Narration generated.")}>{busy?"Generating…":"Generate voiceover"}</button></>}
     {active==="editor"&&<><label className="tool-label">Video title<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Enter a title for the video"/></label><button className="primary-button" disabled={busy||!title.trim()} onClick={()=>void run("/api/v1/render/title-card",{title,duration_seconds:5},"Title-card video rendered.")}>{busy?"Rendering…":"Render title-card MP4"}</button></>}
     {active==="seo"&&<><label className="tool-label">Video topic<input value={seoTopic} onChange={e=>setSeoTopic(e.target.value)} placeholder="Enter the topic for metadata"/></label><button className="primary-button" disabled={busy||!seoTopic.trim()} onClick={()=>void run("/api/v1/seo/generate",{topic:seoTopic,language:"en",format:"short"},"SEO draft generated.")}>{busy?"Generating…":"Generate SEO metadata"}</button></>}
-    {active==="thumbnails"&&<button className="primary-button" onClick={onCreateVideo}>Create a video draft</button>}
+    {active==="thumbnails"&&<><label className="tool-label">Thumbnail title<input value={seoTopic} onChange={e=>setSeoTopic(e.target.value)} placeholder="Enter thumbnail title"/></label><button className="primary-button" disabled={busy||!seoTopic.trim()} onClick={()=>void run("/api/v1/thumbnails/generate",{title:seoTopic,subtitle:"AutoTube AI"},"Thumbnail generated.")}>{busy?"Generating…":"Generate thumbnail"}</button></>}
+    {active==="media"&&<><label className="tool-label">Image prompt<textarea value={seoTopic} onChange={e=>setSeoTopic(e.target.value)} placeholder="Describe the visual asset you need..." rows={4}/></label><button className="primary-button" disabled={busy||seoTopic.trim().length<5} onClick={()=>void run("/api/v1/media/image",{prompt:seoTopic},"Image generated.")}>{busy?"Generating…":"Generate image asset"}</button></>}
     {notice&&<div className={notice.includes("not configured")||notice.includes("requires")?"notice warning":"notice"}>{notice}</div>}
     {result&&<pre className="result-json">{JSON.stringify(result,null,2)}</pre>}
   </div></>;
