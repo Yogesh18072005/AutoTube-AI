@@ -59,8 +59,8 @@ The default FastAPI implementation currently uses SQLite records stored in a Doc
 | YouTube OAuth and upload | Google OAuth + YouTube Data API v3 | `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REDIRECT_URI` |
 | YouTube Analytics | YouTube Analytics API | same OAuth connection |
 | YouTube trend candidates | YouTube Data API key | `YOUTUBE_DATA_API_KEY` |
-| OAuth state signing | HMAC | `AUTOTUBE_SECRET_KEY` |
-| OAuth token encryption | Fernet | `AUTOTUBE_TOKEN_ENCRYPTION_KEY` |
+| OAuth state signing | HMAC; generated and persisted automatically in the data volume (optional override) | `AUTOTUBE_SECRET_KEY` |
+| OAuth token encryption | Fernet; generated and persisted automatically in the data volume (optional override) | `AUTOTUBE_TOKEN_ENCRYPTION_KEY` |
 | Background jobs | Redis/Celery | `REDIS_URL` |
 
 ## Content lifecycle and approval boundary
@@ -109,12 +109,10 @@ The API verifies that the exact video record is approved before upload. The uplo
 ## Local setup
 
 1. Copy `.env.example` to `.env`.
-2. Generate `AUTOTUBE_SECRET_KEY` with Python's `secrets.token_urlsafe(48)`.
-3. Generate `AUTOTUBE_TOKEN_ENCRYPTION_KEY` with `Fernet.generate_key()`.
-4. Add the provider credentials required for the features you intend to use.
-5. Configure Google OAuth's authorized redirect URI as `http://localhost:8000/api/v1/auth/google/callback`.
-6. Run `docker compose up --build`.
-7. Run the dashboard from `apps/web` with `npm ci`, `NEXT_PUBLIC_API_URL=http://localhost:8000`, and `npm run dev`.
+2. Add the provider credentials required for the features you intend to use. Application signing/encryption keys are generated automatically and stored in the persistent data volume.
+3. Configure Google OAuth's authorized redirect URI as `http://localhost:8000/api/v1/auth/google/callback`.
+4. Run `docker compose up --build`.
+5. Run the dashboard from `apps/web` with `npm ci`, `NEXT_PUBLIC_API_URL=http://localhost:8000`, and `npm run dev`.
 
 ## CI
 
