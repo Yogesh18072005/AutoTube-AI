@@ -18,7 +18,7 @@ const emptyMetrics: Metrics = { ideas: 0, scripts: 0, videos: 0, awaiting_review
 async function request(path: string, options?: RequestInit) {
   const response = await fetch(API + path, { ...options, headers: { "Content-Type": "application/json", ...(options?.headers || {}) } });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.detail || "Request failed");
+  if (!response.ok) throw new Error(data.detail || data.message || data.error || "Request failed");
   return data;
 }
 
@@ -66,6 +66,7 @@ export default function Home() {
     finally { setLoading(false); }
   }
 
+  const createIdea = () => run(() => request("/api/v1/ideas", { method: "POST", body: JSON.stringify({ topic, language, format, audience: "Beginners" }) }), "Idea saved to your workspace.");
   const createResearch = () => run(() => request("/api/v1/research", { method: "POST", body: JSON.stringify({ topic, language, format, audience: "Beginners" }) }), "Research brief created.");
   const createScript = () => run(() => request("/api/v1/scripts/generate", { method: "POST", body: JSON.stringify({ topic, language, format, tone }) }), "Script draft created.");
   const createVideo = () => run(() => request("/api/v1/videos", { method: "POST", body: JSON.stringify({ title: title || topic, description, language, format, script: "", tags: [], duration_seconds: format === "short" ? 60 : 600 }) }), "Video draft added to review.");
@@ -94,7 +95,7 @@ export default function Home() {
           <div className="module-grid">{nav.slice(2).map(([id,label,icon])=><button className="module-card" key={id} onClick={()=>setActive(id)}><span className="module-icon">{icon}</span><strong>{label}</strong><small>Open workspace <span>↗</span></small></button>)}</div>
         </>}
 
-        {active === "research" && <><div className="intro"><span className="eyebrow">DISCOVER YOUR NEXT VIDEO</span><h2>AI Research & Ideas</h2><p>Save topic ideas and create structured research briefs. Live trend/source discovery becomes available when a research provider is connected.</p></div><div className="form-card"><label>Topic or question<input value={topic} onChange={e=>setTopic(e.target.value)} placeholder="e.g. How AI agents are changing software development"/></label><div className="form-row"><label>Language<select value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">English</option><option value="hi">Hindi</option></select></label><label>Format<select value={format} onChange={e=>setFormat(e.target.value)}><option value="short">YouTube Shorts</option><option value="long">Long-form video</option></select></label></div><button disabled={!topic.trim()||loading} className="primary-button" onClick={()=>void createResearch()}>Create research brief ✦</button></div><RecordList items={visible}/></>}
+        {active === "research" && <><div className="intro"><span className="eyebrow">DISCOVER YOUR NEXT VIDEO</span><h2>AI Research & Ideas</h2><p>Save topic ideas and create structured research briefs. Live trend/source discovery becomes available when a research provider is connected.</p></div><div className="form-card"><label>Topic or question<input value={topic} onChange={e=>setTopic(e.target.value)} placeholder="e.g. How AI agents are changing software development"/></label><div className="form-row"><label>Language<select value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">English</option><option value="hi">Hindi</option></select></label><label>Format<select value={format} onChange={e=>setFormat(e.target.value)}><option value="short">YouTube Shorts</option><option value="long">Long-form video</option></select></label></div><div className="form-row"><button disabled={!topic.trim()||loading} className="primary-button" onClick={()=>void createResearch()}>Create research brief ✦</button><button disabled={!topic.trim()||loading} className="text-button" onClick={()=>void createIdea()}>Save as idea</button></div></div><RecordList items={visible}/></>}
 
         {active === "scripts" && <><div className="intro"><span className="eyebrow">BILINGUAL WRITING ROOM</span><h2>Script Studio</h2><p>Draft a structured script with a hook and scene plan. Connect an AI provider for original, researched scripts.</p></div><div className="form-card"><label>Video topic<input value={topic} onChange={e=>setTopic(e.target.value)} placeholder="What should the video explain?"/></label><div className="form-row"><label>Language<select value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">English</option><option value="hi">Hindi</option></select></label><label>Format<select value={format} onChange={e=>setFormat(e.target.value)}><option value="short">Short (under 60 sec)</option><option value="long">Long-form</option></select></label></div><label>Tone<input value={tone} onChange={e=>setTone(e.target.value)} /></label><button disabled={!topic.trim()||loading} className="primary-button" onClick={()=>void createScript()}>Generate script draft ✦</button></div><RecordList items={visible}/></>}
 
