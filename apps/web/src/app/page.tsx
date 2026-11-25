@@ -13,6 +13,7 @@ const nav = [
 
 type Item = { id: string; kind: string; status: string; data: Record<string, unknown>; created_at: string };
 type Metrics = { ideas: number; scripts: number; videos: number; awaiting_review: number; approved: number; scheduled: number; published: number; views: number; watch_time_hours: number; note?: string };
+type YoutubeReport = { rows?: Array<Array<string | number | null>> };
 const emptyMetrics: Metrics = { ideas: 0, scripts: 0, videos: 0, awaiting_review: 0, approved: 0, scheduled: 0, published: 0, views: 0, watch_time_hours: 0 };
 
 async function request(path: string, options?: RequestInit) {
@@ -26,6 +27,8 @@ export default function Home() {
   const [active, setActive] = useState<string>("overview");
   const [items, setItems] = useState<Item[]>([]);
   const [metrics, setMetrics] = useState<Metrics>(emptyMetrics);
+  const [youtubeReport, setYoutubeReport] = useState<YoutubeReport | null>(null);
+  const [youtubeReportError, setYoutubeReportError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [topic, setTopic] = useState("");
@@ -42,11 +45,26 @@ export default function Home() {
       setItems(all); setMetrics(stats); setSettings(config);
       setMessage("");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "API unavailable. Start the Java Spring Boot API.");
+      setMessage(error instanceof Error ? error.message : "API unavailable. Start the FastAPI service with Docker Compose.");
     }
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  useEffect(() => {
+    if (active !== "analytics") return;
+    const end = new Date().toISOString().slice(0, 10);
+    const start = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    request(`/api/v1/analytics/youtube?start_date=${start}&end_date=${end}`)
+      .then(data => {
+        setYoutubeReport(data as YoutubeReport);
+        setYoutubeReportError("");
+      })
+      .catch(error => {
+        setYoutubeReport(null);
+        setYoutubeReportError(error instanceof Error ? error.message : "Could not load YouTube Analytics.");
+      });
+  }, [active]);
 
   const visible = useMemo(() => items.filter(x => {
     if (active === "approval") return x.kind === "video" && x.status === "video_review";
@@ -101,7 +119,7 @@ export default function Home() {
 
         {active === "publishing" && <><div className="intro"><span className="eyebrow">YOUTUBE DELIVERY</span><h2>Publishing</h2><p>Scheduling is protected by a server-side approval check. Add YouTube OAuth credentials to enable the publishing adapter.</p></div><div className="status-card"><b>Approval gate: enforced</b><span>Unapproved videos are rejected by the API.</span></div><RecordList items={visible} onSchedule={id=>run(()=>request("/api/v1/publishing/"+id+"/schedule",{method:"POST",body:JSON.stringify({scheduled_at:new Date(Date.now()+86400000).toISOString()})}),"Video scheduled.")}/></>}
 
-        {active === "analytics" && <><div className="intro"><span className="eyebrow">MEASURE WHAT MATTERS</span><h2>Channel Analytics</h2><p>Workspace pipeline totals are available now. Connect YouTube Analytics to retrieve real views, watch time and audience retention.</p></div><div className="metric-grid">{[["Videos",metrics.videos],["Approved",metrics.approved],["Scheduled",metrics.scheduled],["Published",metrics.published],["Views",metrics.views],["Watch time (hrs)",metrics.watch_time_hours]].map(([label,value])=><article className="metric-card" key={String(label)}><div className="metric-top"><span>{label}</span></div><strong>{value}</strong><small>{Number(value)===0?"Waiting for channel connection":"Workspace data"}</small></article>)}</div><div className="status-card">{metrics.note}</div></>}
+        {active === "analytics" && <><div className="intro"><span className="eyebrow">MEASURE WHAT MATTERS</span><h2>Channel Analytics</h2><p>Workspace pipeline totals and live YouTube channel performance for the last 28 days.</p></div><div className="metric-grid">{[["Videos",metrics.videos],["Approved",metrics.approved],["Scheduled",metrics.scheduled],["Published",metrics.published]].map(([label,value])=><article className="metric-card" key={String(label)}><div className="metric-top"><span>{label}</span></div><strong>{value}</strong><small>Workspace total</small></article>)}</div><div className="section-row"><div><span className="eyebrow">YOUTUBE ANALYTICS API</span><h2>Daily channel performance</h2></div></div>{youtubeReport?.rows?.length ? <div className="record-list">{youtubeReport.rows.map((row,index)=><article className="record-card" key={index}><div className="record-main"><span className="record-kind">DAILY CHANNEL REPORT</span><h3>{String(row[0] ?? "Date unavailable")}</h3><p>Views: {String(row[1] ?? "—")} · Watch time (minutes): {String(row[2] ?? "—")} · Average view duration (seconds): {String(row[3] ?? "—")} · Subscribers gained: {String(row[4] ?? "—")}</p></div></article>)}</div> : <div className="status-card">{youtubeReportError || "Loading YouTube Analytics…"}</div>}</>}
 
         {active === "settings" && <><div className="intro"><span className="eyebrow">WORKSPACE CONFIGURATION</span><h2>Settings & Providers</h2><p>Choose defaults and connect providers through server environment variables. Never paste secret keys into the browser.</p></div><div className="form-card"><label>Channel name<input value={settings.channel_name} onChange={e=>setSettings({...settings,channel_name:e.target.value})} placeholder="Your YouTube channel"/></label><div className="form-row"><label>Default language<select value={settings.default_language} onChange={e=>setSettings({...settings,default_language:e.target.value})}><option value="en">English</option><option value="hi">Hindi</option></select></label><label>Default format<select value={settings.default_format} onChange={e=>setSettings({...settings,default_format:e.target.value})}><option value="short">Shorts</option><option value="long">Long-form</option></select></label></div><div className="form-row"><label>AI provider<select value={settings.ai_provider} onChange={e=>setSettings({...settings,ai_provider:e.target.value})}><option value="none">Not connected</option><option value="openai">OpenAI</option><option value="google">Google</option><option value="other">Other / custom</option></select></label><label>Voice provider<select value={settings.tts_provider} onChange={e=>setSettings({...settings,tts_provider:e.target.value})}><option value="none">Not connected</option><option value="elevenlabs">ElevenLabs</option><option value="google">Google</option><option value="other">Other / custom</option></select></label></div><button className="primary-button" disabled={loading} onClick={()=>void saveSettings()}>Save settings</button></div></>}
 
