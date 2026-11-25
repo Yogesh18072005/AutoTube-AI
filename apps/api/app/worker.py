@@ -26,7 +26,7 @@ celery_app.conf.update(
 
 async def _generate_content(project: dict[str, Any]) -> dict[str, Any]:
     from app.main import now, save
-    from app.production import generate_text, synthesize_voice, ProviderNotConfigured
+    from app.production import generate_text, synthesize_voice
 
     topic = str(project["topic"]).strip()
     language = str(project.get("language", "en"))
@@ -71,7 +71,10 @@ async def _generate_content(project: dict[str, Any]) -> dict[str, Any]:
         system="You are an experienced bilingual YouTube scriptwriter. Return valid JSON only.",
     )
     try:
-        script_payload = json.loads(script_response)
+        clean_response = script_response.strip()
+        if clean_response.startswith("```"):
+            clean_response = clean_response.split("\\n", 1)[-1].removesuffix("```").strip()
+        script_payload = json.loads(clean_response)
         script_text = str(script_payload["full_script"]).strip()
         scenes = script_payload["scenes"]
         if not script_text or not isinstance(scenes, list) or not scenes:
