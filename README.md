@@ -13,6 +13,8 @@ The previous FastAPI backend in `apps/api` is retained temporarily as a migratio
 - Spring Boot application and CORS configuration
 - PostgreSQL/JPA record persistence
 - Compatible starter routes for health, config, ideas, research, scripts, video records, review decisions, and analytics overview
+- Persistent workspace settings stored as PostgreSQL content records
+- Starter SEO metadata drafts (explicitly labeled as template fallback, not live keyword research)
 - OpenAI-compatible script generation through the configured server-side API key
 - Approval gate: scheduling requests are rejected unless the video record is approved
 - Docker image and Docker Compose PostgreSQL/Redis/API services
@@ -20,13 +22,13 @@ The previous FastAPI backend in `apps/api` is retained temporarily as a migratio
 ### Not yet migrated / not production-ready
 
 - Google OAuth, YouTube upload, scheduling, and YouTube Analytics
-- ElevenLabs voice generation, image generation, FFmpeg rendering, thumbnails, and full editor
+- ElevenLabs voice generation, image generation, FFmpeg rendering, thumbnails, and full editor (voice/render routes return HTTP 501 until migrated; they do not create placeholder media)
 - Real trend research and SEO generation
 - Redis-backed end-to-end pipeline workers
 - Authentication, authorization, per-user ownership, rate limits, and production security hardening
 - Automated data migration from the old SQLite records into PostgreSQL
 
-The Java scheduling endpoint intentionally returns HTTP 501 after checking approval; it does not claim to publish a video. Keep this behavior until the real YouTube OAuth/upload flow is implemented and tested.
+The Java scheduling endpoint intentionally returns HTTP 501 after checking approval; it does not claim to publish a video. Voice generation and FFmpeg rendering also return HTTP 501 until their real provider/renderer integrations are migrated. Keep these safeguards until the corresponding implementations are completed and tested.
 
 ## Requirements
 
