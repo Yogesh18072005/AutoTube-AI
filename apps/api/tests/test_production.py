@@ -77,6 +77,15 @@ def test_ai_research_brief_requires_provider_credentials(monkeypatch):
     assert "OPENAI_API_KEY" in response.json()["detail"]
 
 
+def test_google_oauth_callback_rejects_invalid_state():
+    response = client.get(
+        "/api/v1/auth/google/callback",
+        params={"code": "authorization-code", "state": "invalid-state"},
+    )
+    assert response.status_code == 400
+    assert "Invalid OAuth state" in response.json()["detail"]
+
+
 def test_provider_status_reports_configuration_without_exposing_secrets(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "private-openai-value")
     monkeypatch.setenv("ELEVENLABS_API_KEY", "private-elevenlabs-value")
