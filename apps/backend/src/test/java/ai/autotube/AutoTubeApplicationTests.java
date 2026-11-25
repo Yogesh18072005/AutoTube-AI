@@ -45,6 +45,43 @@ class AutoTubeApplicationTests {
     }
 
     @Test
+    void researchBriefClearlyReportsThatLiveResearchIsNotConnected() throws Exception {
+        mvc.perform(post("/api/v1/research")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"topic\":\"AI agents for beginners\",\"language\":\"en\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.research_status").value("needs_provider"))
+                .andExpect(jsonPath("$.data.source_notes").isArray());
+    }
+
+    @Test
+    void seoMetadataUsesAnHonestTemplateFallback() throws Exception {
+        mvc.perform(post("/api/v1/seo/generate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"topic\":\"Java Spring Boot\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.generation_mode").value("template_fallback"))
+                .andExpect(jsonPath("$.data.suggested_title").value("Java Spring Boot explained simply"))
+                .andExpect(jsonPath("$.data.tags").isArray());
+    }
+
+    @Test
+    void topicEndpointsRejectMissingOrTooShortTopics() throws Exception {
+        mvc.perform(post("/api/v1/ideas")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"topic\":\"AI\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void aiScriptGenerationReportsMissingProviderCredentials() throws Exception {
+        mvc.perform(post("/api/v1/scripts/generate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"topic\":\"Java APIs\",\"language\":\"en\"}"))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
     void publishingIsBlockedUntilVideoIsApproved() throws Exception {
         String response = mvc.perform(post("/api/v1/videos")
                         .contentType(MediaType.APPLICATION_JSON)
