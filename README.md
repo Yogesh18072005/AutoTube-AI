@@ -63,14 +63,7 @@ From the repository root:
 Copy-Item .env.example .env
 ```
 
-Generate the two application secrets locally. Put the outputs into `.env`:
-
-```powershell
-python -c "import secrets; print(secrets.token_urlsafe(48))"
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
-
-Use the first output for `AUTOTUBE_SECRET_KEY` and the second for `AUTOTUBE_TOKEN_ENCRYPTION_KEY`. Do not commit `.env`.
+The API automatically creates strong, persistent OAuth-signing and token-encryption keys inside the `autotube_data` Docker volume on first use. You do not need to generate or paste these keys. Keep the volume when restarting or upgrading the app, and back it up with the rest of your application data. You may set `AUTOTUBE_SECRET_KEY` and `AUTOTUBE_TOKEN_ENCRYPTION_KEY` explicitly if you manage secrets yourself. Do not commit `.env`.
 
 ### 2. Add provider credentials
 
