@@ -89,8 +89,10 @@ class VideoInput(BaseModel):
     format: str = "short"
     script: str = ""
     description: str = ""
-    tags: list[str] = []
+    tags: list[str] = Field(default_factory=list)
     duration_seconds: int = 60
+    asset_url: str | None = None
+    thumbnail_url: str | None = None
 
 class DecisionInput(BaseModel):
     note: str = ""
@@ -182,7 +184,9 @@ def create_script(payload: ScriptInput) -> dict[str, Any]:
 @app.post("/api/v1/videos")
 def create_video(payload: VideoInput) -> dict[str, Any]:
     data = payload.model_dump()
-    data.update({"asset_url": payload.asset_url, "thumbnail_url": None, "seo": {"title": payload.title, "description": payload.description, "tags": payload.tags}})
+    if payload.asset_url and not payload.asset_url.startswith("/media/"):
+        raise HTTPException(400, "asset_url must refer to a generated asset under /media/")
+    data.update({"thumbnail_url": payload.thumbnail_url, "seo": {"title": payload.title, "description": payload.description, "tags": payload.tags}})
     return save("video", data, "video_review")
 
 @app.post("/api/v1/videos/{video_id}/approve")
@@ -200,15 +204,27 @@ def reject_video(video_id: str, payload: DecisionInput) -> dict[str, Any]:
     return change(video_id, status="changes_requested", patch={"review_note": payload.note})
 
 @app.post("/api/v1/publishing/{video_id}/schedule")
-def schedule_video(video_id: str, payload: ScheduleInput) -> dict[str, Any]:
+async def schedule_video(video_id: str, payload: ScheduleInput) -> dict[str, Any]:
     item = get_record(video_id)
     if item["kind"] != "video":
         raise HTTPException(400, "Only videos can be scheduled")
     if item["status"] != "approved":
         raise HTTPException(409, "Publishing blocked: approve the final video and metadata first.")
-    if not os.getenv("YOUTUBE_CLIENT_ID") or not os.getenv("YOUTUBE_CLIENT_SECRET"):
-        raise HTTPException(503, "YouTube OAuth is not configured. Add credentials to the server environment.")
-    raise HTTPException(501, "The YouTube OAuth token flow and upload worker must be implemented before live scheduling is enabled.")
+    try:
+        scheduled_at = datetime.fromisoformat(payload.scheduled_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise HTTPException(422, "scheduled_at must be a valid ISO-8601 timestamp.") from exc
+    if scheduled_at.tzinfo is None:
+        raise HTTPException(422, "scheduled_at must include a timezone.")
+    if scheduled_at <= datetime.now(timezone.utc):
+        raise HTTPException(422, "scheduled_at must be in the future.")
+    from app.advanced import YouTubeUploadInput, upload_approved_video
+    try:
+        return await upload_approved_video(YouTubeUploadInput(
+            video_id=video_id, privacy_status="private", publish_at=scheduled_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        ))
+    except HTTPException:
+        raise
 
 @app.get("/api/v1/analytics/overview")
 def analytics() -> dict[str, Any]:
