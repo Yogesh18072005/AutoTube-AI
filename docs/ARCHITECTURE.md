@@ -1,39 +1,62 @@
 # AutoTube AI architecture
 
+## Product scope
+
+A single workspace for bilingual Hindi/English AI & technology YouTube production, supporting Shorts and long-form videos.
+
+## Modules
+
+1. Dashboard and channel setup
+2. Topic ideas and research briefs
+3. Script studio
+4. Voice and narration workspace
+5. Media library and asset provenance
+6. Video editing and FFmpeg rendering workflow
+7. Thumbnail studio
+8. SEO metadata studio
+9. Human approval queue
+10. YouTube publishing
+11. Analytics
+12. Automation orchestration
+13. Provider and workspace settings
+
 ## Content lifecycle
 
-`IDEA -> RESEARCHED -> SCRIPT_DRAFT -> SCRIPT_APPROVED -> ASSETS_GENERATED -> RENDERED -> VIDEO_REVIEW -> APPROVED -> SCHEDULED -> PUBLISHED`
+`IDEA -> RESEARCHED -> SCRIPT_DRAFT -> ASSETS_GENERATED -> RENDERED -> VIDEO_REVIEW -> APPROVED -> SCHEDULED -> PUBLISHED`
 
-A rejected item returns to editing. Publishing endpoints must enforce `APPROVED` status server-side.
+Rejected videos move to `CHANGES_REQUESTED`. The API requires `APPROVED` status before the scheduling boundary. The live YouTube adapter remains disabled until OAuth, upload and reconciliation are implemented.
 
-## Services
+## Current implementation in feature/full-platform-mvp
 
-1. Research: topic discovery, source capture, duplicate checks, trend scoring.
-2. Script: Hindi/English scripts with hooks, scene plan, citations/source notes.
-3. Media: provider adapters for TTS and image/video assets.
-4. Renderer: FFmpeg-based vertical (9:16) and horizontal (16:9) outputs.
-5. Review: preview, metadata editing, quality checklist, approve/reject.
-6. Publishing: OAuth connection, upload, schedule, status reconciliation.
-7. Analytics: views, watch time, retention and content performance.
+- FastAPI endpoints for ideas, research briefs, script drafts, video records, approvals/rejections, analytics summary, settings and automation status.
+- SQLite local persistence for the starter workflow.
+- Next.js creator workspace with navigation for all product modules.
+- API-enforced approval checks.
+- Provider configuration placeholders and honest fallback states for missing integrations.
+- API tests for health, module configuration and publishing approval enforcement.
 
-## Key design decisions
+## External services still required
 
-- Provider adapters keep AI, TTS and media vendors replaceable.
-- Celery/Redis handles long-running jobs; API requests do not render videos inline.
-- PostgreSQL stores workflow state and metadata; object storage stores media.
-- Every generated asset records provider, prompt, language and provenance.
-- Human approval is mandatory before upload/scheduling.
-- Secrets are environment-managed; never committed.
+- AI/search provider for current topic research and original scripts
+- TTS provider for narration
+- Image/video generation provider and object storage for media assets
+- FFmpeg worker for real video rendering
+- Redis/Celery worker for long-running jobs and retries
+- YouTube OAuth, Data API upload and Analytics API integration
 
-## Initial API boundaries
+## Production architecture target
 
-- `GET /health`
-- `GET /api/v1/projects`
-- `POST /api/v1/ideas`
-- `POST /api/v1/scripts`
-- `POST /api/v1/videos`
-- `POST /api/v1/videos/{id}/approve`
-- `POST /api/v1/videos/{id}/reject`
-- `POST /api/v1/publishing/{id}/schedule`
+- PostgreSQL with migrations for durable relational data
+- Redis + Celery for background jobs
+- FFmpeg render workers
+- S3-compatible object storage for media
+- Provider adapters for LLM, search, TTS and media generation
+- YouTube OAuth token encryption, upload reconciliation and analytics ingestion
+- Authentication, per-user authorization, audit logs and rate limits
 
-Only `/health` is implemented in the initial scaffold. Other endpoints are planned milestones.
+## Security invariants
+
+- Secrets stay in server environment variables; never expose them to the browser.
+- A video is not publishable until a user approves the final render and metadata.
+- Scheduling and publishing must verify approval on the server, not trust the UI.
+- Provider outages must fail visibly; do not report generated assets or uploads that do not exist.

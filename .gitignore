@@ -6,6 +6,7 @@ build/
 .venv/
 __pycache__/
 *.py[cod]
+*.db
 .env
 .env.*
 !.env.example
@@ -14,3 +15,15 @@ coverage/
 .pytest_cache/
 uploads/
 renders/
+
+# Generated files
+apps/api/*.egg-info/
+apps/backend/target/
+apps/web/node_modules/
+apps/web/.next/
+
+# Generated files
+apps/api/*.egg-info/
+apps/backend/target/
+apps/web/node_modules/
+apps/web/.next/
