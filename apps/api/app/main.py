@@ -210,6 +210,8 @@ async def schedule_video(video_id: str, payload: ScheduleInput) -> dict[str, Any
         raise HTTPException(400, "Only videos can be scheduled")
     if item["status"] != "approved":
         raise HTTPException(409, "Publishing blocked: approve the final video and metadata first.")
+    if not os.getenv("YOUTUBE_CLIENT_ID") or not os.getenv("YOUTUBE_CLIENT_SECRET"):
+        raise HTTPException(503, "YouTube OAuth is not configured. Add the Google OAuth client credentials to the API environment.")
     try:
         scheduled_at = datetime.fromisoformat(payload.scheduled_at.replace("Z", "+00:00"))
     except ValueError as exc:
