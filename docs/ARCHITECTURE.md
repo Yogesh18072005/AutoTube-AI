@@ -1,62 +1,115 @@
-# AutoTube AI architecture
+# AutoTube AI — Architecture
 
 ## Product scope
 
-A single workspace for bilingual Hindi/English AI & technology YouTube production, supporting Shorts and long-form videos.
+AutoTube AI is a bilingual (English/Hindi) workspace for planning and managing YouTube Shorts and long-form video content. The current repository contains a Next.js dashboard, a Java Spring Boot API, PostgreSQL persistence, an optional OpenAI-compatible script-generation adapter, and a legacy FastAPI service retained during migration.
 
-## Modules
+The application is a development-stage MVP, not a production YouTube automation service.
 
-1. Dashboard and channel setup
-2. Topic ideas and research briefs
-3. Script studio
-4. Voice and narration workspace
-5. Media library and asset provenance
-6. Video editing and FFmpeg rendering workflow
-7. Thumbnail studio
-8. SEO metadata studio
-9. Human approval queue
-10. YouTube publishing
-11. Analytics
-12. Automation orchestration
-13. Provider and workspace settings
+## System overview
 
-## Content lifecycle
+```text
+Browser
+  |
+  v
+Next.js 15 / React 19 dashboard (apps/web)
+  |
+  | HTTP / JSON, NEXT_PUBLIC_API_URL
+  v
+Spring Boot 3.5 / Java 21 API (apps/backend)
+  |                         |
+  | Spring Data JPA         | OpenAI-compatible Chat Completions
+  v                         v
+PostgreSQL              Configured AI provider
+  |
+  +-- content_records (ideas, research, scripts, videos, settings)
 
-`IDEA -> RESEARCHED -> SCRIPT_DRAFT -> ASSETS_GENERATED -> RENDERED -> VIDEO_REVIEW -> APPROVED -> SCHEDULED -> PUBLISHED`
+Redis service: provisioned in Docker Compose; application-level job orchestration is not yet implemented.
+FastAPI service (apps/api): legacy implementation retained during migration; it is not the primary API in the current Java-backed dashboard.
+```
 
-Rejected videos move to `CHANGES_REQUESTED`. The API requires `APPROVED` status before the scheduling boundary. The live YouTube adapter remains disabled until OAuth, upload and reconciliation are implemented.
+## Current modules and implementation status
 
-## Current implementation in feature/full-platform-mvp
+| Module | Current implementation |
+|---|---|
+| Dashboard | Next.js workspace navigation, pipeline metrics, forms and record lists |
+| Ideas | Topic records persisted through the Java API |
+| Research | Structured starter brief and hook suggestions; no live source discovery |
+| Script Studio | Template draft endpoint plus optional server-side AI generation |
+| Video records | Create, list, approve and request-changes workflow |
+| SEO Studio | Starter title, description, tags and hashtags; no live keyword data |
+| Analytics | Workspace record counts; YouTube channel metrics are not connected |
+| Settings | Workspace defaults persisted as records |
+| Publishing | Server checks approval, then returns an explicit not-implemented response |
+| Voice, rendering, thumbnails | UI guidance/placeholders; provider and rendering integrations are pending |
+| Automation | Workflow outline only; durable background workers and retries are pending |
 
-- FastAPI endpoints for ideas, research briefs, script drafts, video records, approvals/rejections, analytics summary, settings and automation status.
-- SQLite local persistence for the starter workflow.
-- Next.js creator workspace with navigation for all product modules.
-- API-enforced approval checks.
-- Provider configuration placeholders and honest fallback states for missing integrations.
-- API tests for health, module configuration and publishing approval enforcement.
+## API surface
 
-## External services still required
+The Java service listens on port 8000 by default.
 
-- AI/search provider for current topic research and original scripts
-- TTS provider for narration
-- Image/video generation provider and object storage for media assets
-- FFmpeg worker for real video rendering
-- Redis/Celery worker for long-running jobs and retries
-- YouTube OAuth, Data API upload and Analytics API integration
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/health` | Service health |
+| GET | `/api/v1/config` | Supported languages, formats and modules |
+| GET | `/api/v1/records` | List workspace records; optional `kind` filter |
+| GET / PUT | `/api/v1/settings` | Read or save workspace defaults |
+| POST | `/api/v1/ideas` | Save an idea |
+| POST | `/api/v1/research` | Create a starter research brief |
+| POST | `/api/v1/scripts` | Create a template script |
+| POST | `/api/v1/scripts/generate` | Generate a script through configured AI provider |
+| POST | `/api/v1/seo/generate` | Create starter SEO metadata |
+| POST | `/api/v1/videos` | Create a video draft |
+| POST | `/api/v1/videos/{id}/approve` | Approve a video record |
+| POST | `/api/v1/videos/{id}/reject` | Request changes |
+| POST | `/api/v1/publishing/{id}/schedule` | Approval-gated; live publishing is not implemented |
+| GET | `/api/v1/analytics/overview` | Workspace pipeline totals |
 
-## Production architecture target
+Voice generation and title-card rendering endpoints intentionally return HTTP 501 until their integrations are migrated.
 
-- PostgreSQL with migrations for durable relational data
-- Redis + Celery for background jobs
-- FFmpeg render workers
-- S3-compatible object storage for media
-- Provider adapters for LLM, search, TTS and media generation
-- YouTube OAuth token encryption, upload reconciliation and analytics ingestion
+## Content lifecycle and approval boundary
+
+```text
+IDEA -> RESEARCH BRIEF -> SCRIPT DRAFT -> VIDEO REVIEW
+                                      |          |
+                                      |          +-> CHANGES REQUESTED
+                                      |          |
+                                      +----------+-> APPROVED
+                                                     |
+                                                     v
+                                       PUBLISHING ADAPTER (pending)
+```
+
+The Java API checks the persisted video status before accepting a scheduling request. An unapproved video receives HTTP 409. An approved video currently receives HTTP 501 because YouTube OAuth upload and scheduling have not been implemented. The UI is not treated as the security boundary.
+
+## Local development
+
+From the repository root:
+
+1. Copy `.env.example` to `.env` and set local values if needed.
+2. Start PostgreSQL, Redis and the Java API with `docker compose up --build`.
+3. In another terminal, run `cd apps/web`, `npm ci`, then `npm run dev`.
+4. Open `http://localhost:3000`. The dashboard calls the API at `http://localhost:8000` by default.
+
+To run Java tests locally: `cd apps/backend; mvn test`.
+
+## Continuous integration
+
+GitHub Actions runs Java tests and frontend lint, type-check and production-build checks for pushes and pull requests targeting `main`.
+
+## Planned production work
+
 - Authentication, per-user authorization, audit logs and rate limits
+- Database migrations and tenant-aware data ownership
+- Redis-backed job queue, retries and worker monitoring
+- Provider adapters for live research, narration, image generation and video rendering
+- Durable media storage and asset provenance
+- YouTube OAuth, secure token storage, upload reconciliation and Analytics API ingestion
+- Deployment configuration, observability, backup and operational documentation
 
-## Security invariants
+## Security and reliability principles
 
-- Secrets stay in server environment variables; never expose them to the browser.
-- A video is not publishable until a user approves the final render and metadata.
-- Scheduling and publishing must verify approval on the server, not trust the UI.
-- Provider outages must fail visibly; do not report generated assets or uploads that do not exist.
+- Keep provider credentials in server-side environment variables; never expose secrets through `NEXT_PUBLIC_*` variables.
+- Do not claim an asset, upload, or analytics result exists unless the integration actually produced it.
+- Keep human approval as a server-enforced prerequisite for publishing.
+- Surface provider and service failures instead of silently reporting success.
