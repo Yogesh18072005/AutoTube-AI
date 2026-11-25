@@ -315,5 +315,7 @@ async def upload_approved_video(payload: YouTubeUploadInput):
             uploaded=await client.put(upload_url,content=stream.read(),headers={"Authorization":f"Bearer {tokens['access_token']}","Content-Type":"video/mp4","Content-Length":str(asset.stat().st_size)})
         uploaded.raise_for_status()
         result=uploaded.json()
-    change(payload.video_id,status="published",patch={"youtube_video_id":result.get("id"),"youtube_url":f"https://youtube.com/watch?v={result.get('id')}","published_at":now()})
-    return {"status":"published","youtube_video_id":result.get("id"),"url":f"https://youtube.com/watch?v={result.get('id')}"}
+    scheduled = bool(payload.publish_at)
+    status = "scheduled" if scheduled else "published"
+    change(payload.video_id,status=status,patch={"youtube_video_id":result.get("id"),"youtube_url":f"https://youtube.com/watch?v={result.get('id')}","scheduled_for":payload.publish_at,"published_at":None if scheduled else now()})
+    return {"status":status,"youtube_video_id":result.get("id"),"url":f"https://youtube.com/watch?v={result.get('id')}"}
