@@ -1,0 +1,5 @@
+# Keep local build output and secrets out of the image build context.
+.env
+.env.*
+target/
+.git/
