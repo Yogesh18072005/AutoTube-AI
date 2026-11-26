@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const nav = [
@@ -105,7 +106,7 @@ export default function Home() {
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark">A</span><span>AutoTube<span className="brand-ai"> AI</span><small>CREATOR WORKSPACE</small></span></div>
         <div className="workspace-label">WORKSPACE</div>
-        <nav>{nav.map(([id, label, icon]) => <button key={id} className={active === id ? "nav-item active" : "nav-item"} onClick={() => { setActive(id); setMessage(""); }}><span className="nav-icon">{icon}</span>{label}{id === "approval" && metrics.awaiting_review > 0 && <b className="nav-count">{metrics.awaiting_review}</b>}</button>)}<a className="nav-item" href="/intelligence"><span className="nav-icon">✧</span>Creator Intelligence</a><a className="nav-item" href="/optimization"><span className="nav-icon">✦</span>Optimization Lab</a></nav>
+        <nav>{nav.map(([id, label, icon]) => <button key={id} className={active === id ? "nav-item active" : "nav-item"} onClick={() => { setActive(id); setMessage(""); }}><span className="nav-icon">{icon}</span>{label}{id === "approval" && metrics.awaiting_review > 0 && <b className="nav-count">{metrics.awaiting_review}</b>}</button>)}<Link className="nav-item" href="/intelligence"><span className="nav-icon">✧</span>Creator Intelligence</Link><Link className="nav-item" href="/optimization"><span className="nav-icon">✦</span>Optimization Lab</Link></nav>
         <div className="sidebar-bottom"><span className="online-dot" /> Local workspace <small>Provider connections pending</small></div>
       </aside>
 

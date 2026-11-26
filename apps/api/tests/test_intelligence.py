@@ -23,3 +23,12 @@ def test_recommendations_do_not_invent_trends_without_data():
     result = build_recommendations({}, {}, [])
     assert len(result) == 1
     assert result[0]["priority"] == "info"
+
+
+def test_channel_report_rejects_future_or_invalid_date_ranges():
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+    response = client.get("/api/v1/intelligence/channel?start_date=not-a-date&end_date=2026-01-01")
+    assert response.status_code == 422
