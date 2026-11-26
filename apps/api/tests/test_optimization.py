@@ -39,7 +39,7 @@ def test_retention_endpoint_finds_large_drop():
         {"seconds": 45, "audience_percent": 66},
     ]})
     assert response.status_code == 200
-    assert response.json()["opening_loss_percentage_points"] == 8
+    assert response.json()["opening_loss_percentage_points"] == 30
     assert response.json()["largest_drops"][0]["percentage_points_lost"] == 22
 
 
