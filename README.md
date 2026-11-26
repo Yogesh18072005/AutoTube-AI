@@ -205,3 +205,12 @@ npm run build
 - Use HTTPS, authentication, per-user authorization, rate limits, monitoring, managed storage and a production database before exposing this as a public multi-user service.
 - Provider usage may incur charges. Check each provider's pricing and quotas.
 
+
+
+## Creator Intelligence Engine
+
+The Creator Intelligence page (`/intelligence`) adds a connected-channel performance report powered by the YouTube Analytics API. It compares a selected reporting window with the immediately preceding equal-length period, displays channel totals (views, watch time, average view duration, subscriber gains/losses and engagement actions), and ranks the connected channel's own videos by views. Recommendations are generated only from returned channel metrics and are explicitly editorial prompts, not causal claims or performance predictions.
+
+The report requires a connected YouTube channel and the existing OAuth scope `yt-analytics.readonly`. It refreshes expired access tokens using the stored refresh token. Video-level results are limited to the rows returned by YouTube Analytics; no private competitor analytics are available. Public trend discovery remains a separate YouTube Data API search feature and should not be interpreted as proof of future popularity.
+
+API: `GET /api/v1/intelligence/channel?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`. The date window must be in the past and no longer than 366 days.
