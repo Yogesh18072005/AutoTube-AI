@@ -402,3 +402,7 @@ def automation_job(job_id: str) -> dict[str, Any]:
 
 from app.optimization import router as optimization_router
 app.include_router(optimization_router)
+
+
+from app.intelligence import router as intelligence_router
+app.include_router(intelligence_router)
