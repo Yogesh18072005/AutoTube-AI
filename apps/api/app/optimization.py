@@ -161,7 +161,7 @@ def title_check(payload: TitleRequest) -> dict[str, Any]:
 def retention_analysis(payload: RetentionRequest) -> dict[str, Any]:
     points = [point.model_dump() for point in payload.points]
     first = points[0]["audience_percent"]
-    opening_cutoff = min(30.0, points[-1]["seconds"] * 0.1)
+    opening_cutoff = min(30.0, points[-1]["seconds"])
     opening_points = [point for point in points if point["seconds"] <= opening_cutoff]
     opening_end = opening_points[-1]["audience_percent"] if opening_points else first
     drops = []
