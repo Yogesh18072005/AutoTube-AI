@@ -398,3 +398,7 @@ def automation_job(job_id: str) -> dict[str, Any]:
         return {"job_id": job_id, "status": result.status.lower(), "result": result.result if result.successful() else None}
     except Exception as exc:
         raise HTTPException(503, f"Automation worker unavailable: {exc}") from exc
+
+
+from app.optimization import router as optimization_router
+app.include_router(optimization_router)

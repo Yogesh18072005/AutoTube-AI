@@ -143,6 +143,24 @@ Open **Approval Queue** and review the generated record. Only approve a video af
 | GET | `/api/v1/analytics/youtube` | Live YouTube Analytics report |
 | GET | `/api/v1/research/trends` | Recent YouTube trend candidates |
 
+## Creator Optimization Lab
+
+The dashboard includes an **Optimization Lab** at `/optimization` with four provider-free analysis tools:
+
+- **Hook score:** transparent heuristic feedback for specificity, viewer relevance, stakes, curiosity and brevity.
+- **Title + thumbnail checker:** title-length guidance, vague wording flags and repeated wording detection.
+- **Retention analyzer:** accepts timestamp/audience-percentage points from a YouTube Studio export and highlights large interval drops.
+- **Shorts candidate finder:** groups timestamped transcript segments into possible short clips for a human editor to review.
+
+These tools do not require an AI API key. Their scores are editorial heuristics, not predictions of views, click-through rate or retention. Retention analysis reports patterns in supplied data but cannot establish why viewers left. Shorts candidates require a timestamped transcript; the tool does not download or transcribe videos automatically.
+
+API routes:
+- `POST /api/v1/optimization/hook-score`
+- `POST /api/v1/optimization/title-check`
+- `POST /api/v1/optimization/retention`
+- `POST /api/v1/optimization/shorts-candidates`
+
+
 ## Optional Java migration backend
 
 The Java service is not the default dashboard API yet. It can be started alongside the production API with:
