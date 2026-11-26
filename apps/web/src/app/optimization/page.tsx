@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -63,7 +64,7 @@ export default function OptimizationPage() {
 
   return <main style={{ minHeight: "100vh", background: "#080d18", color: "#e5e7eb", padding: "36px 5vw", fontFamily: "Arial, sans-serif" }}>
     <div style={{ maxWidth: 1050, margin: "0 auto" }}>
-      <a href="/" style={{ color: "#a78bfa", textDecoration: "none" }}>← Back to AutoTube AI</a>
+      <Link href="/" style={{ color: "#a78bfa", textDecoration: "none" }}>← Back to AutoTube AI</Link>
       <p style={{ color: "#a78bfa", letterSpacing: 2, fontSize: 12, fontWeight: 700, marginTop: 28 }}>CREATOR INTELLIGENCE</p>
       <h1 style={{ fontSize: 36, margin: "8px 0" }}>Optimization Lab</h1>
       <p style={{ color: "#9ca3af", lineHeight: 1.6 }}>Practical, explainable checks for your opening hook, packaging, audience retention and Shorts opportunities.</p>
